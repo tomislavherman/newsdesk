@@ -1,6 +1,6 @@
 {
   "name": "newsdesk",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Personal news reader with AI-powered relevance filtering",
   "type": "module",
   "main": "src/index.js",
