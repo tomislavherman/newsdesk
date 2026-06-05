@@ -602,6 +602,7 @@
       </button>
       <button data-view="sources">Sources</button>
       <button data-view="admin" id="admin-nav-btn" style="display:none">Admin</button>
+      <button data-view="about">About</button>
     </nav>
     <div class="header-actions">
     </div>
@@ -665,6 +666,20 @@
           <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
           <tbody id="users-tbody"></tbody>
         </table>
+      </div>
+    </div>
+    <div class="view" id="view-about">
+      <div class="admin-section" style="max-width:640px">
+        <h3>What is Newsdesk?</h3>
+        <p style="font-size:0.9rem;line-height:1.6;color:var(--text)">Newsdesk is a personal news reader that periodically fetches articles from sources you configure and uses AI to filter out content you are unlikely to find relevant. Over time it learns from your feedback to improve its decisions.</p>
+      </div>
+      <div class="admin-section" style="max-width:640px">
+        <h3>How it works</h3>
+        <p style="font-size:0.9rem;line-height:1.6;color:var(--text)">Articles are fetched every 10 minutes from your configured sources. Each new article is analysed by AI which generates a short summary and decides whether the article is relevant based on your past feedback. When you mark an article as <em>Not interested</em>, it is added to your feedback history.</p>
+      </div>
+      <div class="admin-section" style="max-width:640px">
+        <h3>Managing sources</h3>
+        <p style="font-size:0.9rem;line-height:1.6;color:var(--text)">Add a source by pasting any news site URL. The AI will detect whether the site has an RSS feed or identify a CSS selector for scraping. You can pause a source without deleting it, or remove it along with all its articles.</p>
       </div>
     </div>
   </main>
