@@ -51,7 +51,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS articles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
-    url TEXT NOT NULL UNIQUE,
+    url TEXT NOT NULL,
     title TEXT,
     summary TEXT,
     image_url TEXT,
@@ -60,7 +60,8 @@ db.exec(`
     is_relevant INTEGER DEFAULT 1,
     relevance_reason TEXT,
     seen INTEGER DEFAULT 0,
-    analysis_notes TEXT
+    analysis_notes TEXT,
+    UNIQUE(source_id, url)
   );
 
   CREATE TABLE IF NOT EXISTS feedback (
@@ -111,11 +112,40 @@ if (!userCols.includes('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked
 const articleCols = db.prepare("PRAGMA table_info(articles)").all().map(c => c.name);
 if (!articleCols.includes('analysis_notes'))db.exec('ALTER TABLE articles ADD COLUMN analysis_notes TEXT');
 if (!articleCols.includes('image_url'))    db.exec('ALTER TABLE articles ADD COLUMN image_url TEXT');
+if (!articleCols.includes('relevance_reason')) db.exec('ALTER TABLE articles ADD COLUMN relevance_reason TEXT');
+
+// Rebuild articles table if it still has old global url unique constraint
+const articleIndexes = db.prepare("PRAGMA index_list(articles)").all();
+const hasOldArticleUrlUnique = articleIndexes.some(idx => {
+  if (!idx.unique) return false;
+  const cols = db.prepare(`PRAGMA index_info(${idx.name})`).all().map(c => c.name);
+  return cols.length === 1 && cols[0] === 'url';
+});
+if (hasOldArticleUrlUnique) {
+  db.exec(`
+    CREATE TABLE articles_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      title TEXT, summary TEXT, image_url TEXT,
+      published_at DATETIME,
+      fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      is_relevant INTEGER DEFAULT 1,
+      relevance_reason TEXT,
+      seen INTEGER DEFAULT 0,
+      analysis_notes TEXT,
+      UNIQUE(source_id, url)
+    );
+    INSERT INTO articles_new SELECT id, source_id, url, title, summary, image_url, published_at, fetched_at, is_relevant, relevance_reason, seen, analysis_notes FROM articles;
+    DROP TABLE articles;
+    ALTER TABLE articles_new RENAME TO articles;
+  `);
+}
 
 db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sources_user_id          ON sources(user_id);
   CREATE INDEX IF NOT EXISTS idx_articles_source_id       ON articles(source_id);
-  CREATE INDEX IF NOT EXISTS idx_articles_url             ON articles(url);
+  CREATE INDEX IF NOT EXISTS idx_articles_source_url      ON articles(source_id, url);
   CREATE INDEX IF NOT EXISTS idx_articles_source_relevance ON articles(source_id, is_relevant, seen);
   CREATE INDEX IF NOT EXISTS idx_feedback_article_id      ON feedback(article_id);
 `);
@@ -206,17 +236,17 @@ export function insertSource(source) {
   `).run(source);
 }
 
-export function updateSourceActive(id, active) {
-  return db.prepare('UPDATE sources SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
+export function updateSourceActive(id, userId, active) {
+  return db.prepare('UPDATE sources SET active = ? WHERE id = ? AND user_id = ?').run(active ? 1 : 0, id, userId);
 }
 
-export function updateSource(id, fields) {
+export function updateSource(id, userId, fields) {
   return db.prepare(`
     UPDATE sources SET name = @name, feed_url = @feed_url, selector = @selector,
       date_selector = @date_selector, image_selector = @image_selector, fetch_type = @fetch_type,
       max_age_days = @max_age_days, color = @color
-    WHERE id = @id
-  `).run({ ...fields, id });
+    WHERE id = @id AND user_id = @userId
+  `).run({ ...fields, id, userId });
 }
 
 export function deleteSource(id, userId) {
@@ -256,8 +286,8 @@ export function getUnseenCount(userId) {
   `).get(userId);
 }
 
-export function articleExistsByUrl(url) {
-  return db.prepare('SELECT id FROM articles WHERE url = ?').get(url);
+export function articleExistsByUrl(sourceId, url) {
+  return db.prepare('SELECT id FROM articles WHERE source_id = ? AND url = ?').get(sourceId, url);
 }
 
 export function insertArticle(article) {
@@ -267,12 +297,18 @@ export function insertArticle(article) {
   `).run(article);
 }
 
-export function markArticleSeen(id) {
-  return db.prepare('UPDATE articles SET seen = 1 WHERE id = ?').run(id);
+export function markArticleSeen(id, userId) {
+  return db.prepare(`
+    UPDATE articles SET seen = 1 WHERE id = ?
+    AND source_id IN (SELECT id FROM sources WHERE user_id = ?)
+  `).run(id, userId);
 }
 
-export function markArticleUnseen(id) {
-  return db.prepare('UPDATE articles SET seen = 0 WHERE id = ?').run(id);
+export function markArticleUnseen(id, userId) {
+  return db.prepare(`
+    UPDATE articles SET seen = 0 WHERE id = ?
+    AND source_id IN (SELECT id FROM sources WHERE user_id = ?)
+  `).run(id, userId);
 }
 
 export function markAllSeen(userId) {
@@ -282,12 +318,18 @@ export function markAllSeen(userId) {
   `).run(userId);
 }
 
-export function dismissArticle(id) {
-  return db.prepare('UPDATE articles SET is_relevant = 0 WHERE id = ?').run(id);
+export function dismissArticle(id, userId) {
+  return db.prepare(`
+    UPDATE articles SET is_relevant = 0 WHERE id = ?
+    AND source_id IN (SELECT id FROM sources WHERE user_id = ?)
+  `).run(id, userId);
 }
 
-export function restoreArticle(id) {
-  db.prepare('UPDATE articles SET is_relevant = 1 WHERE id = ?').run(id);
+export function restoreArticle(id, userId) {
+  db.prepare(`
+    UPDATE articles SET is_relevant = 1 WHERE id = ?
+    AND source_id IN (SELECT id FROM sources WHERE user_id = ?)
+  `).run(id, userId);
   db.prepare('DELETE FROM feedback WHERE article_id = ?').run(id);
 }
 

@@ -121,7 +121,78 @@ async function fetchHtmlArticles(source) {
     articles.push({ url: absoluteUrl, title, published_at, image_url });
   });
 
+  // Fallback for JS-rendered pages (e.g. Next.js SPAs): try to extract articles
+  // from embedded JSON data when the selector matched nothing.
+  if (articles.length === 0) {
+    const extracted = extractEmbeddedArticles($, source.url);
+    if (extracted.length > 0) {
+      console.log(`[fetch] Selector found nothing, extracted ${extracted.length} articles from embedded JSON`);
+      articles.push(...extracted);
+    }
+  }
+
   return articles;
+}
+
+function extractEmbeddedArticles($, baseUrl) {
+  const results = [];
+  const seen = new Set();
+
+  function addArticle(url, title, published_at = null) {
+    if (!url || !title || seen.has(url)) return;
+    seen.add(url);
+    const absoluteUrl = url.startsWith('http') ? url : new URL(url, baseUrl).href;
+    results.push({ url: absoluteUrl, title: String(title).trim(), published_at, image_url: null });
+  }
+
+  // 1. JSON-LD structured data
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const data = JSON.parse($(el).text());
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        const entries = item['@graph'] ?? (Array.isArray(item.itemListElement) ? item.itemListElement : [item]);
+        for (const entry of entries) {
+          const type = entry['@type'];
+          if (type === 'Article' || type === 'BlogPosting' || type === 'NewsArticle') {
+            addArticle(entry.url, entry.headline ?? entry.name, entry.datePublished ?? null);
+          }
+          if (type === 'ListItem' && entry.item) {
+            addArticle(entry.item.url ?? entry.item['@id'], entry.item.name ?? entry.name);
+          }
+        }
+      }
+    } catch {}
+  });
+
+  if (results.length > 0) return results;
+
+  // 2. Next.js __NEXT_DATA__
+  const nextDataEl = $('script#__NEXT_DATA__');
+  if (nextDataEl.length) {
+    try {
+      const nextData = JSON.parse(nextDataEl.text());
+      // Walk the props tree looking for arrays of objects with url/title/slug fields
+      function walk(obj, depth = 0) {
+        if (depth > 8 || !obj || typeof obj !== 'object') return;
+        if (Array.isArray(obj)) {
+          for (const item of obj) {
+            if (item && typeof item === 'object' && (item.title || item.headline || item.name) && (item.url || item.slug || item.href || item.path)) {
+              const url = item.url ?? item.href ?? item.path ?? (item.slug ? new URL(item.slug, baseUrl).href : null);
+              addArticle(url, item.title ?? item.headline ?? item.name, item.date ?? item.publishedAt ?? item.datePublished ?? null);
+            } else {
+              walk(item, depth + 1);
+            }
+          }
+        } else {
+          for (const val of Object.values(obj)) walk(val, depth + 1);
+        }
+      }
+      walk(nextData?.props?.pageProps);
+    } catch {}
+  }
+
+  return results;
 }
 
 async function fetchArticlePage(url) {
@@ -173,7 +244,8 @@ async function processSource(source) {
   let newCount = 0;
 
   for (const article of articles) {
-    if (!article.url || articleExistsByUrl(article.url)) continue;
+    if (!article.url) { console.log(`[fetch] Skipping article with no URL: "${article.title?.slice(0, 60)}"`); continue; }
+    if (articleExistsByUrl(source.id, article.url)) continue;
 
     if (isTooOld(article.published_at, source.max_age_days ?? 7)) {
       console.log(`[fetch] Skipping old article: "${article.title?.slice(0, 60)}"`);

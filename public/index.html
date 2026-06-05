@@ -516,6 +516,18 @@
       width: 100%;
       max-width: 520px;
       margin: 1rem;
+      max-height: calc(100vh - 2rem);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal .modal-body {
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .modal .modal-actions {
+      flex-shrink: 0;
     }
 
     .modal h2 {
@@ -554,7 +566,7 @@
     .spinner { display: none; font-size: 0.85rem; color: var(--muted); }
     .spinner.visible { display: inline; }
 
-    .color-swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+    .color-swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; padding: 3px; }
     .color-swatch {
       width: 28px; height: 28px;
       border-radius: 50%;
@@ -687,7 +699,7 @@
       </div>
       <div class="admin-section" style="max-width:640px">
         <h3>Managing sources</h3>
-        <p style="font-size:0.9rem;line-height:1.6;color:var(--text)">Add a source by pasting any news site URL. The AI will detect whether the site has an RSS feed or identify a CSS selector for scraping. You can pause a source without deleting it, or remove it along with all its articles.</p>
+        <p style="font-size:0.9rem;line-height:1.6;color:var(--text)">Add a source by pasting any news site URL. The AI will detect whether the site has an RSS feed or identify a content selector for scraping. You can pause a source without deleting it, or remove it along with all its articles.</p>
       </div>
     </div>
   </main>
@@ -772,45 +784,47 @@
   <div class="modal-overlay" id="edit-source-modal">
     <div class="modal">
       <h2>Edit source</h2>
-      <div class="form-row">
-        <label>Name</label>
-        <input type="text" id="edit-source-name" placeholder="Source name" />
-      </div>
-      <div class="form-row">
-        <label>Fetch type</label>
-        <select id="edit-source-type">
-          <option value="rss">RSS</option>
-          <option value="html">HTML scraping</option>
-        </select>
-      </div>
-      <div class="form-row" id="edit-feed-url-row">
-        <label>Feed URL</label>
-        <input type="url" id="edit-source-feed-url" placeholder="https://example.com/feed.xml" />
-      </div>
-      <div class="form-row" id="edit-selector-row">
-        <label>CSS selector</label>
-        <input type="text" id="edit-source-selector" placeholder="article" />
-      </div>
-      <div class="form-row" id="edit-date-selector-row">
-        <label>Date selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-        <input type="text" id="edit-source-date-selector" placeholder="time, [fs-list-field=date]" />
-      </div>
-      <div class="form-row" id="edit-image-selector-row">
-        <label>Image selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-        <input type="text" id="edit-source-image-selector" placeholder="img, .thumbnail img" />
-      </div>
-      <div class="form-row">
-        <label>Max article age</label>
-        <select id="edit-source-max-age">
-          <option value="1">1 day</option>
-          <option value="7">1 week</option>
-          <option value="14">2 weeks</option>
-          <option value="30">1 month</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <label>Card color</label>
-        <div class="color-swatches" id="edit-color-swatches"></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>Name</label>
+          <input type="text" id="edit-source-name" placeholder="Source name" />
+        </div>
+        <div class="form-row">
+          <label>Fetch type</label>
+          <select id="edit-source-type">
+            <option value="rss">RSS</option>
+            <option value="html">HTML scraping</option>
+          </select>
+        </div>
+        <div class="form-row" id="edit-feed-url-row">
+          <label>Feed URL</label>
+          <input type="url" id="edit-source-feed-url" placeholder="https://example.com/feed.xml" />
+        </div>
+        <div class="form-row" id="edit-selector-row">
+          <label>Content selector</label>
+          <input type="text" id="edit-source-selector" placeholder="article" />
+        </div>
+        <div class="form-row" id="edit-date-selector-row">
+          <label>Date selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input type="text" id="edit-source-date-selector" placeholder="time, [fs-list-field=date]" />
+        </div>
+        <div class="form-row" id="edit-image-selector-row">
+          <label>Image selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input type="text" id="edit-source-image-selector" placeholder="img, .thumbnail img" />
+        </div>
+        <div class="form-row">
+          <label>Max article age</label>
+          <select id="edit-source-max-age">
+            <option value="1">1 day</option>
+            <option value="7">1 week</option>
+            <option value="14">2 weeks</option>
+            <option value="30">1 month</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Card color</label>
+          <div class="color-swatches" id="edit-color-swatches"></div>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn" id="cancel-edit-btn">Cancel</button>
@@ -823,55 +837,57 @@
   <div class="modal-overlay" id="add-source-modal">
     <div class="modal">
       <h2>Add news source</h2>
-      <div class="form-row">
-        <label>URL</label>
-        <input type="url" id="source-url-input" placeholder="https://example.com" />
-      </div>
-      <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;align-items:center;">
-        <button class="btn" id="analyze-btn">Analyze URL</button>
-        <span class="spinner" id="analyze-spinner">Analyzing…</span>
-      </div>
-      <div class="analyzed-preview" id="analyzed-preview"></div>
-      <div class="form-row">
-        <label>Name</label>
-        <input type="text" id="source-name-input" placeholder="Source name" />
-      </div>
-      <div class="form-row">
-        <label>Fetch type</label>
-        <select id="source-type-select">
-          <option value="">— select —</option>
-          <option value="rss">RSS</option>
-          <option value="html">HTML scraping</option>
-        </select>
-      </div>
-      <div class="form-row" id="feed-url-row" style="display:none;">
-        <label>Feed URL</label>
-        <input type="url" id="source-feed-url-input" placeholder="https://example.com/feed.xml" />
-      </div>
-      <div class="form-row" id="selector-row" style="display:none;">
-        <label>CSS selector</label>
-        <input type="text" id="source-selector-input" placeholder=".article-list .item" />
-      </div>
-      <div class="form-row" id="date-selector-row" style="display:none;">
-        <label>Date selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-        <input type="text" id="source-date-selector-input" placeholder="time, [fs-list-field=date]" />
-      </div>
-      <div class="form-row" id="image-selector-row" style="display:none;">
-        <label>Image selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-        <input type="text" id="source-image-selector-input" placeholder="img, .thumbnail img" />
-      </div>
-      <div class="form-row">
-        <label>Max article age</label>
-        <select id="source-max-age-select">
-          <option value="1" selected>1 day</option>
-          <option value="7">1 week</option>
-          <option value="14">2 weeks</option>
-          <option value="30">1 month</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <label>Card color</label>
-        <div class="color-swatches" id="add-color-swatches"></div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>URL</label>
+          <input type="url" id="source-url-input" placeholder="https://example.com" />
+          <div class="auth-error" id="source-url-error"></div>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;align-items:center;">
+          <button class="btn" id="analyze-btn">Analyze URL</button>
+          <span class="spinner" id="analyze-spinner">Analyzing…</span>
+        </div>
+        <div class="form-row">
+          <label>Name</label>
+          <input type="text" id="source-name-input" placeholder="Source name" />
+        </div>
+        <div class="form-row">
+          <label>Fetch type</label>
+          <select id="source-type-select">
+            <option value="">— select —</option>
+            <option value="rss">RSS</option>
+            <option value="html">HTML scraping</option>
+          </select>
+        </div>
+        <div class="form-row" id="feed-url-row" style="display:none;">
+          <label>Feed URL</label>
+          <input type="url" id="source-feed-url-input" placeholder="https://example.com/feed.xml" />
+        </div>
+        <div class="form-row" id="selector-row" style="display:none;">
+          <label>Content selector</label>
+          <input type="text" id="source-selector-input" placeholder=".article-list .item" />
+        </div>
+        <div class="form-row" id="date-selector-row" style="display:none;">
+          <label>Date selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input type="text" id="source-date-selector-input" placeholder="time, [fs-list-field=date]" />
+        </div>
+        <div class="form-row" id="image-selector-row" style="display:none;">
+          <label>Image selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input type="text" id="source-image-selector-input" placeholder="img, .thumbnail img" />
+        </div>
+        <div class="form-row">
+          <label>Max article age</label>
+          <select id="source-max-age-select">
+            <option value="1" selected>1 day</option>
+            <option value="7">1 week</option>
+            <option value="14">2 weeks</option>
+            <option value="30">1 month</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Card color</label>
+          <div class="color-swatches" id="add-color-swatches"></div>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn" id="cancel-source-btn">Cancel</button>
@@ -1243,10 +1259,13 @@
     }
 
     // Sources
+    let loadedSources = [];
+
     async function loadSources() {
       try {
         const res = await fetch('/api/sources');
         const sources = await res.json();
+        loadedSources = sources;
         const container = document.getElementById('sources-list');
         if (!sources.length) {
           container.innerHTML = '<div class="empty"><strong>No sources yet</strong><p>Add a source to get started.</p></div>';
@@ -1334,7 +1353,10 @@
       const type = document.getElementById('source-type-select').value;
       const feedUrl = document.getElementById('source-feed-url-input').value.trim();
       const selector = document.getElementById('source-selector-input').value.trim();
-      const ok = url && type && (type === 'rss' ? feedUrl : selector);
+      const errEl = document.getElementById('source-url-error');
+      const isDuplicate = url && loadedSources.some(s => s.url === url);
+      errEl.textContent = isDuplicate ? 'This source has already been added' : '';
+      const ok = url && type && (type === 'rss' ? feedUrl : selector) && !isDuplicate;
       document.getElementById('save-source-btn').disabled = !ok;
     }
 
@@ -1386,13 +1408,6 @@
         });
         const data = await res.json();
         lastAnalysis = data;
-        const preview = document.getElementById('analyzed-preview');
-        preview.innerHTML = `<strong>Detected configuration</strong>
-          Name: ${data.name ?? '—'}<br/>
-          Type: ${data.has_rss ? 'RSS' : 'HTML scraping'}<br/>
-          ${data.feed_url ? `Feed URL: ${data.feed_url}<br/>` : ''}
-          ${data.selector ? `Selector: ${data.selector}` : ''}`;
-        preview.classList.add('visible');
 
         if (data.name) document.getElementById('source-name-input').value = data.name;
         if (data.has_rss) {
@@ -1435,14 +1450,17 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url, name: name || null, fetch_type, feed_url: feed_url || null, selector: selector || null, date_selector: date_selector || null, image_selector: image_selector || null, max_age_days, color: addSourceColor, analysis_notes: lastAnalysis?._log ? JSON.stringify(lastAnalysis._log) : null }),
         });
-        if (!res.ok) throw new Error();
-        const { id } = await res.json();
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById('source-url-error').textContent = data.error ?? 'Failed to add source';
+          return;
+        }
         modal.classList.remove('open');
         resetModal();
         loadSources();
-        startFetchPolling(id);
+        startFetchPolling(data.id);
       } catch {
-        alert('Failed to add source');
+        document.getElementById('source-url-error').textContent = 'Failed to add source';
       }
     });
 
@@ -1512,16 +1530,25 @@
 
     // Color palette
     const SOURCE_COLORS = [
+      { value: '#ede9e3', label: 'Stone' },
+      { value: '#dedad4', label: 'Pebble' },
+      { value: '#ccc8c2', label: 'Slate' },
+      { value: '#b8b4ae', label: 'Ash' },
       { value: '#fdf6e3', label: 'Sand' },
       { value: '#fde8d8', label: 'Peach' },
+      { value: '#fad4c0', label: 'Apricot' },
       { value: '#fce4ec', label: 'Rose' },
+      { value: '#f8d0dc', label: 'Blush' },
       { value: '#f3e5f5', label: 'Lavender' },
       { value: '#e8eaf6', label: 'Indigo' },
+      { value: '#dce3f8', label: 'Periwinkle' },
       { value: '#e3f2fd', label: 'Sky' },
       { value: '#e0f7fa', label: 'Cyan' },
       { value: '#e8f5e9', label: 'Mint' },
+      { value: '#d6eedd', label: 'Sage' },
       { value: '#f1f8e9', label: 'Lime' },
       { value: '#fffde7', label: 'Lemon' },
+      { value: '#fff8e1', label: 'Cream' },
     ];
 
     function renderSwatches(containerId, selectedColor, onSelect) {

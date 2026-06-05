@@ -145,12 +145,12 @@ fastify.get('/api/articles', async (req) => {
 fastify.get('/api/articles/unseen-count', async (req) => getUnseenCount(req.user.id));
 
 fastify.post('/api/articles/:id/seen', async (req) => {
-  markArticleSeen(Number(req.params.id));
+  markArticleSeen(Number(req.params.id), req.user.id);
   return { ok: true };
 });
 
 fastify.post('/api/articles/:id/unseen', async (req) => {
-  markArticleUnseen(Number(req.params.id));
+  markArticleUnseen(Number(req.params.id), req.user.id);
   return { ok: true };
 });
 
@@ -161,13 +161,13 @@ fastify.post('/api/articles/seen-all', async (req) => {
 
 fastify.post('/api/articles/:id/feedback', async (req) => {
   const id = Number(req.params.id);
-  dismissArticle(id);
+  dismissArticle(id, req.user.id);
   insertFeedback(id, req.body?.reason);
   return { ok: true };
 });
 
 fastify.post('/api/articles/:id/restore', async (req) => {
-  restoreArticle(Number(req.params.id));
+  restoreArticle(Number(req.params.id), req.user.id);
   return { ok: true };
 });
 
@@ -186,18 +186,25 @@ fastify.post('/api/sources/analyze', async (req, reply) => {
   return detectSourceConfig(url);
 });
 
-fastify.post('/api/sources', async (req) => {
+fastify.post('/api/sources', async (req, reply) => {
   const { url, name, feed_url, selector, date_selector, image_selector, fetch_type, max_age_days, color, analysis_notes } = req.body;
-  const result = insertSource({
-    user_id: req.user.id, url, name,
-    feed_url: feed_url ?? null, selector: selector ?? null,
-    date_selector: date_selector ?? null, image_selector: image_selector ?? null,
-    fetch_type, max_age_days: max_age_days ?? 1,
-    color: color ?? null, analysis_notes: analysis_notes ?? null,
-  });
-  const id = result.lastInsertRowid;
-  fetchSource(id).catch(err => fastify.log.error(err));
-  return { id };
+  try {
+    const result = insertSource({
+      user_id: req.user.id, url, name,
+      feed_url: feed_url ?? null, selector: selector ?? null,
+      date_selector: date_selector ?? null, image_selector: image_selector ?? null,
+      fetch_type, max_age_days: max_age_days ?? 1,
+      color: color ?? null, analysis_notes: analysis_notes ?? null,
+    });
+    const id = result.lastInsertRowid;
+    fetchSource(id).catch(err => fastify.log.error(err));
+    return { id };
+  } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+      return reply.code(409).send({ error: 'This source has already been added' });
+    }
+    throw err;
+  }
 });
 
 fastify.post('/api/sources/:id/fetch', async (req) => {
@@ -209,9 +216,9 @@ fastify.patch('/api/sources/:id', async (req) => {
   const id = Number(req.params.id);
   const { active, name, feed_url, selector, date_selector, image_selector, fetch_type, max_age_days, color } = req.body;
   if (active !== undefined) {
-    updateSourceActive(id, active);
+    updateSourceActive(id, req.user.id, active);
   } else {
-    updateSource(id, { name, feed_url: feed_url ?? null, selector: selector ?? null, date_selector: date_selector ?? null, image_selector: image_selector ?? null, fetch_type, max_age_days: max_age_days ?? 1, color: color ?? null });
+    updateSource(id, req.user.id, { name, feed_url: feed_url ?? null, selector: selector ?? null, date_selector: date_selector ?? null, image_selector: image_selector ?? null, fetch_type, max_age_days: max_age_days ?? 1, color: color ?? null });
   }
   return { ok: true };
 });
