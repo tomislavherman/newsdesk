@@ -193,7 +193,7 @@ async function processSource(source) {
         image_url: image_url ?? null,
         published_at: article.published_at,
         is_relevant: result.is_relevant === false ? 0 : 1,
-        relevance_reason: null,
+        relevance_reason: result.is_relevant === false ? (result.reason ?? null) : null,
         analysis_notes: result._log ? JSON.stringify(result._log) : null,
       });
       newCount++;

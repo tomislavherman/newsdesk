@@ -205,7 +205,8 @@ export function getArticles({ userId, limit = 50, offset = 0, read = 'all', rele
   const where = 'WHERE ' + conditions.join(' AND ');
   return db.prepare(`
     SELECT a.*, s.name as source_name, s.url as source_url, s.color as source_color,
-      (SELECT reason FROM feedback WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as feedback_reason
+      (SELECT reason FROM feedback WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as feedback_reason,
+      EXISTS(SELECT 1 FROM feedback WHERE article_id = a.id) as user_dismissed
     FROM articles a
     JOIN sources s ON a.source_id = s.id
     ${where}

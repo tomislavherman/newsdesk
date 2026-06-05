@@ -56,7 +56,7 @@ Return only valid JSON, no explanation.`;
 }
 
 export async function summarizeArticle(title, content, userId = null) {
-  const recentFeedback = userId ? getRecentFeedback(userId, 20) : [];
+  const recentFeedback = userId ? getRecentFeedback(userId, 50) : [];
 
   const feedbackSection = recentFeedback.length > 0
     ? `\nThe user has previously dismissed these articles as not interesting:\n${recentFeedback.map(f => `- "${f.title}"${f.reason ? ` (reason: ${f.reason})` : ''}`).join('\n')}\n\nBased only on these dismissals, set is_relevant to false if this article clearly matches the same pattern. If there is no clear match, default to true.`
@@ -65,6 +65,7 @@ export async function summarizeArticle(title, content, userId = null) {
   const prompt = `Summarize this article and assess relevance. Return a JSON object with:
 - summary (string): 2-3 neutral factual sentences summarizing the article
 - is_relevant (boolean): true by default; false only if the article clearly matches patterns from the user's dismissed articles below${feedbackSection ? '' : ' (no dismissals yet — always true)'}
+- reason (string|null): if is_relevant is false, a single sentence explaining why this article matches the user's dismissed patterns. null if is_relevant is true.
 ${feedbackSection}
 Article title: ${title}
 Article content: ${content?.slice(0, 3000) ?? '(no content)'}
@@ -73,7 +74,7 @@ Return only valid JSON, no explanation.`;
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: 256,
+    max_tokens: 512,
     messages: [{ role: 'user', content: prompt }],
   });
 

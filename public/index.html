@@ -221,7 +221,7 @@
       display: flex;
       align-items: center;
       gap: 0;
-      margin-bottom: 1.25rem;
+      margin-bottom: 0;
       border-bottom: 1px solid var(--border);
     }
 
@@ -240,11 +240,31 @@
 
     .sub-tab.active { color: var(--text); border-bottom-color: var(--accent); }
 
-    .all-filters {
+    .filter-toggle {
       margin-left: auto;
-      display: flex;
-      gap: 0.5rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.4rem 0.6rem;
+      color: var(--muted);
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+      display: none;
     }
+
+    .filter-toggle:hover { background: var(--bg); color: var(--text); }
+    .filter-toggle.active { color: var(--accent); }
+
+    .all-filters {
+      display: none;
+      gap: 1rem;
+      padding: 0.65rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      margin-bottom: 1.25rem;
+    }
+
+    .all-filters.open { display: flex; }
 
     .filter-label {
       display: flex;
@@ -263,6 +283,8 @@
       background: var(--surface);
       cursor: pointer;
     }
+
+    #articles-list { margin-top: 1.25rem; }
 
     /* Article cards */
     .article-card {
@@ -402,6 +424,22 @@
     }
 
     .dismissed-banner span { flex: 1; }
+
+    .ai-filter-reason {
+      font-size: 0.82rem;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.4rem 0.75rem;
+      margin-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .ai-filter-reason span { flex: 1; }
 
     .pagination {
       display: flex;
@@ -578,18 +616,23 @@
       <div class="sub-tabs">
         <button class="sub-tab active" data-tab="unread">Unseen <span class="badge visible" id="unread-tab-badge"></span></button>
         <button class="sub-tab" data-tab="all">All</button>
-        <div class="all-filters" id="all-filters" style="display:none;">
-          <label class="filter-label">Status <select id="filter-read">
-            <option value="all">All</option>
-            <option value="unread">Unseen</option>
-            <option value="read">Seen</option>
-          </select></label>
-          <label class="filter-label">Interest <select id="filter-relevance">
-            <option value="relevant">Interested</option>
-            <option value="irrelevant">Not interested</option>
-            <option value="all">All</option>
-          </select></label>
-        </div>
+        <button class="filter-toggle" id="filter-toggle-btn" title="Filters">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="all-filters" id="all-filters">
+        <label class="filter-label">Status <select id="filter-read">
+          <option value="all">All</option>
+          <option value="unread">Unseen</option>
+          <option value="read">Seen</option>
+        </select></label>
+        <label class="filter-label">Interest <select id="filter-relevance">
+          <option value="relevant">Relevant</option>
+          <option value="irrelevant">Irrelevant</option>
+          <option value="all">All</option>
+        </select></label>
       </div>
       <div id="articles-list"></div>
       <div class="pagination" id="articles-pagination"></div>
@@ -878,6 +921,7 @@
 
       container.innerHTML = articles.map(a => {
         const dismissed = !a.is_relevant;
+        const aiFiltered = dismissed && !a.user_dismissed;
         return [
           '<div class="article-card" id="article-' + a.id + '" style="' + (a.source_color ? 'background:' + escHtml(a.source_color) + ';' : '') + (!a.seen ? 'border-color:var(--accent);' : (a.source_color ? 'border-color:' + escHtml(a.source_color) + ';' : '')) + '">',
             // top-right icon cluster
@@ -897,8 +941,9 @@
               '<span class="article-date">' + formatDate(a.published_at ?? a.fetched_at) + '</span>',
             '</div>',
             '<h2 class="article-title" style="padding-right:4rem"><a href="' + escHtml(a.url) + '" target="_blank" rel="noopener" onclick="markSeen(' + a.id + ')">' + escHtml(a.title ?? a.url) + '</a></h2>',
-            // dismissed banner
-            dismissed ? '<div class="dismissed-banner"><span>✕ Not interested' + (a.feedback_reason ? ' — ' + escHtml(a.feedback_reason) : '') + '</span><button class="btn" onclick="restoreArticle(' + a.id + ')">Restore</button></div>' : '',
+            // AI filter reason or user-dismissed banner
+            aiFiltered ? '<div class="ai-filter-reason"><span>Filtered by AI' + (a.relevance_reason ? ': ' + escHtml(a.relevance_reason) : '') + '</span><button class="btn" onclick="restoreArticle(' + a.id + ')">Restore</button></div>' : '',
+            dismissed && !aiFiltered ? '<div class="dismissed-banner"><span>✕ Not interested' + (a.feedback_reason ? ' — ' + escHtml(a.feedback_reason) : '') + '</span><button class="btn" onclick="restoreArticle(' + a.id + ')">Restore</button></div>' : '',
             // body
             '<div class="article-body">',
               a.image_url ? '<img class="article-image" src="' + escHtml(a.image_url) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '',
@@ -955,9 +1000,22 @@
         btn.classList.add('active');
         activeArticleTab = btn.dataset.tab;
         currentPage = 0;
-        document.getElementById('all-filters').style.display = activeArticleTab === 'all' ? 'flex' : 'none';
+        const onAll = activeArticleTab === 'all';
+        const toggleBtn = document.getElementById('filter-toggle-btn');
+        toggleBtn.style.display = onAll ? 'flex' : 'none';
+        if (!onAll) {
+          document.getElementById('all-filters').classList.remove('open');
+          toggleBtn.classList.remove('active');
+        }
         loadArticles();
       });
+    });
+
+    document.getElementById('filter-toggle-btn').addEventListener('click', () => {
+      const panel = document.getElementById('all-filters');
+      const btn = document.getElementById('filter-toggle-btn');
+      const open = panel.classList.toggle('open');
+      btn.classList.toggle('active', open);
     });
 
     document.getElementById('filter-read').addEventListener('change', () => { currentPage = 0; loadArticles(); });
