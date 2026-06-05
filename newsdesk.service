@@ -1,0 +1,15 @@
+[Unit]
+Description=Newsdesk news reader
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/newsdesk
+EnvironmentFile=/home/ubuntu/newsdesk/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
