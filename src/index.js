@@ -3,11 +3,11 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import {
-  getSources, insertSource, updateSourceActive, deleteSource,
-  getArticles, getUnseenCount, markArticleSeen, markAllSeen,
-  dismissArticle, insertFeedback,
+  getSources, insertSource, updateSourceActive, updateSource, deleteSource, deleteAllSources, getSourceById,
+  getArticles, getUnseenCount, markArticleSeen, markArticleUnseen, markAllSeen,
+  dismissArticle, restoreArticle, deleteAllArticles, insertFeedback,
 } from './db.js';
-import { fetchAllSources, detectSourceConfig } from './fetcher.js';
+import { fetchAllSources, fetchSource, detectSourceConfig } from './fetcher.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -17,10 +17,14 @@ await fastify.register((await import('@fastify/static')).default, {
   root: join(__dirname, '..', 'public'),
 });
 
+const ADMIN_MODE = !!process.env.ADMIN_MODE;
+
+fastify.get('/api/config', async () => ({ adminMode: ADMIN_MODE }));
+
 // Articles
 fastify.get('/api/articles', async (req) => {
-  const { limit = 50, offset = 0, unseen } = req.query;
-  return getArticles({ limit: Number(limit), offset: Number(offset), unseen: unseen === 'true' });
+  const { limit = 50, offset = 0, read = 'all', relevance = 'all' } = req.query;
+  return getArticles({ limit: Number(limit), offset: Number(offset), read, relevance });
 });
 
 fastify.get('/api/articles/unseen-count', async () => {
@@ -32,8 +36,18 @@ fastify.post('/api/articles/:id/seen', async (req) => {
   return { ok: true };
 });
 
+fastify.post('/api/articles/:id/unseen', async (req) => {
+  markArticleUnseen(Number(req.params.id));
+  return { ok: true };
+});
+
 fastify.post('/api/articles/seen-all', async () => {
   markAllSeen();
+  return { ok: true };
+});
+
+fastify.delete('/api/articles', async () => {
+  deleteAllArticles();
   return { ok: true };
 });
 
@@ -42,6 +56,11 @@ fastify.post('/api/articles/:id/feedback', async (req) => {
   const { reason } = req.body ?? {};
   dismissArticle(id);
   insertFeedback(id, reason);
+  return { ok: true };
+});
+
+fastify.post('/api/articles/:id/restore', async (req) => {
+  restoreArticle(Number(req.params.id));
   return { ok: true };
 });
 
@@ -57,15 +76,42 @@ fastify.post('/api/sources/analyze', async (req) => {
 });
 
 fastify.post('/api/sources', async (req) => {
-  const { url, name, feed_url, selector, fetch_type } = req.body;
+  const { url, name, feed_url, selector, date_selector, image_selector, fetch_type, max_age_days, color, analysis_notes } = req.body;
   if (!url || !fetch_type) throw fastify.httpErrors.badRequest('url and fetch_type are required');
-  const result = insertSource({ url, name, feed_url: feed_url ?? null, selector: selector ?? null, fetch_type });
-  return { id: result.lastInsertRowid };
+  const result = insertSource({
+    url, name,
+    feed_url: feed_url ?? null,
+    selector: selector ?? null,
+    date_selector: date_selector ?? null,
+    image_selector: image_selector ?? null,
+    fetch_type,
+    max_age_days: max_age_days ?? 7,
+    color: color ?? null,
+    analysis_notes: analysis_notes ?? null,
+  });
+  const id = result.lastInsertRowid;
+  fetchSource(id).catch(err => fastify.log.error(err));
+  return { id };
+});
+
+fastify.post('/api/sources/:id/fetch', async (req) => {
+  fetchSource(Number(req.params.id)).catch(err => fastify.log.error(err));
+  return { ok: true };
 });
 
 fastify.patch('/api/sources/:id', async (req) => {
-  const { active } = req.body;
-  updateSourceActive(Number(req.params.id), active);
+  const id = Number(req.params.id);
+  const { active, name, feed_url, selector, date_selector, image_selector, fetch_type, max_age_days, color } = req.body;
+  if (active !== undefined) {
+    updateSourceActive(id, active);
+  } else {
+    updateSource(id, { name, feed_url: feed_url ?? null, selector: selector ?? null, date_selector: date_selector ?? null, image_selector: image_selector ?? null, fetch_type, max_age_days: max_age_days ?? 7, color: color ?? null });
+  }
+  return { ok: true };
+});
+
+fastify.delete('/api/sources', async () => {
+  deleteAllSources();
   return { ok: true };
 });
 

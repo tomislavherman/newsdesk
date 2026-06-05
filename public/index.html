@@ -95,11 +95,60 @@
     .btn:hover { background: var(--bg); }
     .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
     .btn-primary:hover { background: #a93226; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
     main { max-width: 800px; margin: 2rem auto; padding: 0 1.5rem; }
 
     .view { display: none; }
     .view.active { display: block; }
+
+    /* Sub-tabs */
+    .sub-tabs {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sub-tab {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.5rem 1rem;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .sub-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+    .all-filters {
+      margin-left: auto;
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .filter-label {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .all-filters select {
+      padding: 0.3rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      background: var(--surface);
+      cursor: pointer;
+    }
 
     /* Article cards */
     .article-card {
@@ -134,7 +183,7 @@
       font-family: 'Playfair Display', serif;
       font-size: 1.15rem;
       line-height: 1.35;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.6rem;
     }
 
     .article-title a {
@@ -144,39 +193,113 @@
 
     .article-title a:hover { text-decoration: underline; }
 
+    .article-body {
+      display: flex;
+      gap: 0.85rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .article-image {
+      width: 80px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 6px;
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+
     .article-summary {
       font-size: 0.9rem;
       color: var(--muted);
       line-height: 1.6;
-      margin-bottom: 0.75rem;
+      flex: 1;
     }
+
+    .article-card { position: relative; }
+
+    .card-top-actions {
+      position: absolute;
+      top: 0.7rem;
+      right: 0.7rem;
+      display: flex;
+      gap: 0.1rem;
+      align-items: center;
+    }
+
+    .card-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0.2rem 0.3rem;
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .card-icon-btn:hover { background: var(--bg); color: var(--text); }
+    .card-icon-btn.dismiss:hover { color: #b03a2e; background: #fdf0ef; }
+
+    .card-menu-dropdown {
+      display: none;
+      position: absolute;
+      top: 2rem;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      z-index: 20;
+      min-width: 140px;
+    }
+
+    .card-menu-dropdown.open { display: block; }
+
+    .card-menu-item {
+      display: block;
+      width: 100%;
+      padding: 0.55rem 0.9rem;
+      background: none;
+      border: none;
+      text-align: left;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: var(--text);
+    }
+
+    .card-menu-item:hover { background: var(--bg); }
 
     .article-actions { display: flex; gap: 0.5rem; align-items: center; }
 
-    .feedback-form {
-      display: none;
-      margin-top: 0.75rem;
-      padding-top: 0.75rem;
-      border-top: 1px solid var(--border);
-    }
-
-    .feedback-form.open { display: block; }
-
-    .feedback-form input {
-      width: 100%;
-      padding: 0.4rem 0.7rem;
-      border: 1px solid var(--border);
+    .dismissed-banner {
+      font-size: 0.82rem;
+      color: #b03a2e;
+      background: #fdf0ef;
+      border: 1px solid #e8c4c0;
       border-radius: 5px;
-      font-family: 'DM Sans', sans-serif;
-      font-size: 0.85rem;
-      margin-bottom: 0.5rem;
+      padding: 0.4rem 0.75rem;
+      margin-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
     }
 
-    .reason-hint {
-      font-size: 0.8rem;
+    .dismissed-banner span { flex: 1; }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1rem 0 2rem;
+      font-size: 0.85rem;
       color: var(--muted);
-      margin-bottom: 0.5rem;
     }
+
+    .pagination button:disabled { opacity: 0.35; cursor: default; }
 
     /* Empty state */
     .empty {
@@ -199,9 +322,12 @@
       gap: 1rem;
     }
 
-    .source-info { flex: 1; }
+    .source-card:hover { border-color: #c8c0b5; }
+    .source-info { flex: 1; min-width: 0; }
     .source-name { font-weight: 500; margin-bottom: 0.15rem; }
     .source-url { font-size: 0.8rem; color: var(--muted); }
+    .source-card-actions { display: flex; gap: 0.25rem; align-items: center; flex-shrink: 0; }
+
     .source-badge {
       font-size: 0.7rem;
       padding: 0.15em 0.5em;
@@ -267,6 +393,52 @@
 
     .spinner { display: none; font-size: 0.85rem; color: var(--muted); }
     .spinner.visible { display: inline; }
+
+    .color-swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.25rem; }
+    .color-swatch {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.1s;
+    }
+    .color-swatch:hover { transform: scale(1.15); }
+    .color-swatch.selected { border-color: #333; transform: scale(1.15); }
+    .color-swatch.none { background: #fff; border: 2px solid var(--border); position: relative; }
+    .color-swatch.none::after { content: '✕'; font-size: 0.7rem; color: var(--muted); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+    .analysis-note {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 0.2rem;
+    }
+
+    .ai-log-step { margin-bottom: 1rem; }
+    .ai-log-step strong { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.3rem; }
+    .ai-log-step pre {
+      font-size: 0.78rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 0.6rem 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+
+    .modal-wide {
+      max-width: 720px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-wide .modal-body {
+      overflow-y: auto;
+      flex: 1;
+      margin-top: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -280,13 +452,32 @@
     </nav>
     <div class="header-actions">
       <button class="btn" id="mark-all-seen-btn">Mark all seen</button>
-      <button class="btn" id="fetch-btn">Fetch now</button>
+      <button class="btn" id="wipe-articles-btn" style="color:var(--accent);display:none">Wipe articles</button>
+      <button class="btn" id="wipe-sources-btn" style="color:var(--accent);display:none">Wipe sources</button>
+      <button class="btn" id="fetch-btn" style="display:none">Fetch now</button>
     </div>
   </header>
 
   <main>
     <div class="view active" id="view-articles">
+      <div class="sub-tabs">
+        <button class="sub-tab active" data-tab="unread">Unseen <span class="badge visible" id="unread-tab-badge"></span></button>
+        <button class="sub-tab" data-tab="all">All</button>
+        <div class="all-filters" id="all-filters" style="display:none;">
+          <label class="filter-label">Status <select id="filter-read">
+            <option value="all">All</option>
+            <option value="unread">Unseen</option>
+            <option value="read">Seen</option>
+          </select></label>
+          <label class="filter-label">Interest <select id="filter-relevance">
+            <option value="relevant">Interested</option>
+            <option value="irrelevant">Not interested</option>
+            <option value="all">All</option>
+          </select></label>
+        </div>
+      </div>
       <div id="articles-list"></div>
+      <div class="pagination" id="articles-pagination"></div>
     </div>
 
     <div class="view" id="view-sources">
@@ -296,6 +487,96 @@
       <div id="sources-list"></div>
     </div>
   </main>
+
+  <!-- AI log modal -->
+  <div class="modal-overlay" id="ai-analysis-modal">
+    <div class="modal modal-wide">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 id="ai-analysis-title">AI Log</h2>
+        <button class="btn" id="close-ai-analysis-btn">Close</button>
+      </div>
+      <div class="modal-body" id="ai-analysis-body"></div>
+    </div>
+  </div>
+
+  <!-- Dismiss modal -->
+  <div class="modal-overlay" id="dismiss-modal">
+    <div class="modal" style="max-width:420px">
+      <h2>Not interested</h2>
+      <p style="font-size:0.9rem;color:var(--muted);margin:0.5rem 0 1rem">You will not see similar content in future.</p>
+      <div class="form-row">
+        <label>Reason <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="dismiss-reason-input" placeholder="e.g. off-topic, clickbait…" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="dismiss-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="dismiss-confirm-btn" style="background:#b03a2e;border-color:#b03a2e">Not interested</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete source modal -->
+  <div class="modal-overlay" id="delete-source-modal">
+    <div class="modal" style="max-width:420px">
+      <h2>Delete source</h2>
+      <p style="font-size:0.9rem;color:var(--muted);margin:0.5rem 0 1.25rem">This will permanently delete the source and all its articles.</p>
+      <div class="modal-actions">
+        <button class="btn" id="delete-source-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="delete-source-confirm-btn" style="background:#b03a2e;border-color:#b03a2e">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit source modal -->
+  <div class="modal-overlay" id="edit-source-modal">
+    <div class="modal">
+      <h2>Edit source</h2>
+      <div class="form-row">
+        <label>Name</label>
+        <input type="text" id="edit-source-name" placeholder="Source name" />
+      </div>
+      <div class="form-row">
+        <label>Fetch type</label>
+        <select id="edit-source-type">
+          <option value="rss">RSS</option>
+          <option value="html">HTML scraping</option>
+        </select>
+      </div>
+      <div class="form-row" id="edit-feed-url-row">
+        <label>Feed URL</label>
+        <input type="url" id="edit-source-feed-url" placeholder="https://example.com/feed.xml" />
+      </div>
+      <div class="form-row" id="edit-selector-row">
+        <label>CSS selector</label>
+        <input type="text" id="edit-source-selector" placeholder="article" />
+      </div>
+      <div class="form-row" id="edit-date-selector-row">
+        <label>Date selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="edit-source-date-selector" placeholder="time, [fs-list-field=date]" />
+      </div>
+      <div class="form-row" id="edit-image-selector-row">
+        <label>Image selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="edit-source-image-selector" placeholder="img, .thumbnail img" />
+      </div>
+      <div class="form-row">
+        <label>Max article age</label>
+        <select id="edit-source-max-age">
+          <option value="1">1 day</option>
+          <option value="7">1 week</option>
+          <option value="14">2 weeks</option>
+          <option value="30">1 month</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Card color</label>
+        <div class="color-swatches" id="edit-color-swatches"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="cancel-edit-btn">Cancel</button>
+        <button class="btn btn-primary" id="save-edit-btn">Save</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Add source modal -->
   <div class="modal-overlay" id="add-source-modal">
@@ -317,11 +598,12 @@
       <div class="form-row">
         <label>Fetch type</label>
         <select id="source-type-select">
+          <option value="">— select —</option>
           <option value="rss">RSS</option>
           <option value="html">HTML scraping</option>
         </select>
       </div>
-      <div class="form-row" id="feed-url-row">
+      <div class="form-row" id="feed-url-row" style="display:none;">
         <label>Feed URL</label>
         <input type="url" id="source-feed-url-input" placeholder="https://example.com/feed.xml" />
       </div>
@@ -329,9 +611,30 @@
         <label>CSS selector</label>
         <input type="text" id="source-selector-input" placeholder=".article-list .item" />
       </div>
+      <div class="form-row" id="date-selector-row" style="display:none;">
+        <label>Date selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="source-date-selector-input" placeholder="time, [fs-list-field=date]" />
+      </div>
+      <div class="form-row" id="image-selector-row" style="display:none;">
+        <label>Image selector <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="source-image-selector-input" placeholder="img, .thumbnail img" />
+      </div>
+      <div class="form-row">
+        <label>Max article age</label>
+        <select id="source-max-age-select">
+          <option value="1">1 day</option>
+          <option value="7" selected>1 week</option>
+          <option value="14">2 weeks</option>
+          <option value="30">1 month</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Card color</label>
+        <div class="color-swatches" id="add-color-swatches"></div>
+      </div>
       <div class="modal-actions">
         <button class="btn" id="cancel-source-btn">Cancel</button>
-        <button class="btn btn-primary" id="save-source-btn">Add source</button>
+        <button class="btn btn-primary" id="save-source-btn" disabled>Add source</button>
       </div>
     </div>
   </div>
@@ -344,7 +647,14 @@
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById(`view-${btn.dataset.view}`).classList.add('active');
-        if (btn.dataset.view === 'sources') loadSources();
+        const onSources = btn.dataset.view === 'sources';
+        if (adminMode) {
+          document.getElementById('wipe-articles-btn').style.display = onSources ? 'none' : '';
+          document.getElementById('wipe-sources-btn').style.display = onSources ? '' : 'none';
+          document.getElementById('fetch-btn').style.display = onSources ? 'none' : '';
+        }
+        document.getElementById('mark-all-seen-btn').style.display = onSources ? 'none' : '';
+        if (onSources) loadSources();
       });
     });
 
@@ -354,8 +664,11 @@
         const res = await fetch('/api/articles/unseen-count');
         const { count } = await res.json();
         const badge = document.getElementById('unseen-badge');
+        const tabBadge = document.getElementById('unread-tab-badge');
         badge.textContent = count;
         badge.classList.toggle('visible', count > 0);
+        tabBadge.textContent = count;
+        tabBadge.classList.toggle('visible', count > 0);
       } catch {}
     }
 
@@ -372,76 +685,307 @@
         container.innerHTML = '<div class="empty"><strong>No articles yet</strong><p>Add a source and click "Fetch now" to get started.</p></div>';
         return;
       }
-      container.innerHTML = articles.map(a => `
-        <div class="article-card" id="article-${a.id}">
-          <div class="article-meta">
-            <span class="source-tag">${a.source_name ?? 'Unknown'}</span>
-            <span class="article-date">${formatDate(a.published_at ?? a.fetched_at)}</span>
-          </div>
-          <h2 class="article-title"><a href="${a.url}" target="_blank" rel="noopener" onclick="markSeen(${a.id})">${a.title ?? a.url}</a></h2>
-          ${a.summary ? `<p class="article-summary">${a.summary}</p>` : ''}
-          <div class="article-actions">
-            <a href="${a.url}" target="_blank" rel="noopener" class="btn" onclick="markSeen(${a.id})">Read full article</a>
-            <button class="btn" onclick="toggleFeedback(${a.id})">Not interested</button>
-          </div>
-          <div class="feedback-form" id="feedback-${a.id}">
-            <p class="reason-hint">Optional: why not interested?</p>
-            <input type="text" placeholder="e.g. off-topic, clickbait…" id="reason-${a.id}" />
-            <div style="display:flex;gap:0.5rem;">
-              <button class="btn btn-primary" onclick="submitFeedback(${a.id})">Dismiss</button>
-              <button class="btn" onclick="toggleFeedback(${a.id})">Cancel</button>
-            </div>
-          </div>
-        </div>
-      `).join('');
+
+      window._articleAnalysis = window._articleAnalysis ?? {};
+      articles.forEach(a => {
+        if (a.analysis_notes) window._articleAnalysis[a.id] = { name: a.title ?? a.url, notes: a.analysis_notes };
+      });
+
+      container.innerHTML = articles.map(a => {
+        const dismissed = !a.is_relevant;
+        return [
+          '<div class="article-card" id="article-' + a.id + '" style="' + (a.source_color ? 'background:' + escHtml(a.source_color) + ';' : '') + (!a.seen ? 'border-color:var(--accent);' : (a.source_color ? 'border-color:' + escHtml(a.source_color) + ';' : '')) + '">',
+            // top-right icon cluster
+            '<div class="card-top-actions">',
+              '<div style="position:relative">',
+                '<button class="card-icon-btn" title="More options" onclick="toggleCardMenu(' + a.id + ', event)">⋮</button>',
+                '<div class="card-menu-dropdown" id="card-menu-' + a.id + '">',
+                  (activeArticleTab === 'all' && a.seen) ? '<button class="card-menu-item" onclick="closeCardMenu(' + a.id + '); markUnseen(' + a.id + ')">Mark as unseen</button>' : '',
+                  a.analysis_notes ? '<button class="card-menu-item" onclick="closeCardMenu(' + a.id + '); openAiAnalysis(' + a.id + ', \'article\')">AI log</button>' : '',
+                '</div>',
+              '</div>',
+              dismissed ? '' : '<button class="card-icon-btn dismiss" title="Not interested" onclick="openDismissModal(' + a.id + ')">✕</button>',
+            '</div>',
+            // meta + title
+            '<div class="article-meta">',
+              '<span class="source-tag">' + escHtml(a.source_name ?? 'Unknown') + '</span>',
+              '<span class="article-date">' + formatDate(a.published_at ?? a.fetched_at) + '</span>',
+            '</div>',
+            '<h2 class="article-title" style="padding-right:4rem"><a href="' + escHtml(a.url) + '" target="_blank" rel="noopener" onclick="markSeen(' + a.id + ')">' + escHtml(a.title ?? a.url) + '</a></h2>',
+            // dismissed banner
+            dismissed ? '<div class="dismissed-banner"><span>✕ Not interested' + (a.feedback_reason ? ' — ' + escHtml(a.feedback_reason) : '') + '</span><button class="btn" onclick="restoreArticle(' + a.id + ')">Restore</button></div>' : '',
+            // body
+            '<div class="article-body">',
+              a.image_url ? '<img class="article-image" src="' + escHtml(a.image_url) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '',
+              a.summary ? '<p class="article-summary">' + escHtml(a.summary) + '</p>' : '',
+            '</div>',
+          '</div>',
+        ].join('');
+      }).join('');
     }
 
+    let activeArticleTab = 'unread';
+    let currentPage = 0;
+    const PAGE_SIZE = 20;
+
+    function renderPagination(hasNext) {
+      const el = document.getElementById('articles-pagination');
+      if (currentPage === 0 && !hasNext) { el.innerHTML = ''; return; }
+      el.innerHTML = [
+        '<button class="btn" onclick="goPage(-1)"' + (currentPage === 0 ? ' disabled' : '') + '>← Prev</button>',
+        '<span>Page ' + (currentPage + 1) + '</span>',
+        '<button class="btn" onclick="goPage(1)"' + (!hasNext ? ' disabled' : '') + '>Next →</button>',
+      ].join('');
+    }
+
+    window.goPage = function(delta) {
+      currentPage = Math.max(0, currentPage + delta);
+      loadArticles();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     async function loadArticles() {
+      const params = new URLSearchParams({ limit: PAGE_SIZE + 1, offset: currentPage * PAGE_SIZE });
+      if (activeArticleTab === 'unread') {
+        params.set('read', 'unread');
+        params.set('relevance', 'relevant');
+      } else {
+        params.set('read', document.getElementById('filter-read').value);
+        params.set('relevance', document.getElementById('filter-relevance').value);
+      }
       try {
-        const res = await fetch('/api/articles?limit=100');
-        renderArticles(await res.json());
-      } catch (e) {
+        const res = await fetch('/api/articles?' + params);
+        const all = await res.json();
+        const hasNext = all.length > PAGE_SIZE;
+        renderArticles(hasNext ? all.slice(0, PAGE_SIZE) : all);
+        renderPagination(hasNext);
+      } catch {
         document.getElementById('articles-list').innerHTML = '<div class="empty"><strong>Failed to load articles</strong></div>';
       }
     }
 
+    document.querySelectorAll('.sub-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.sub-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeArticleTab = btn.dataset.tab;
+        currentPage = 0;
+        document.getElementById('all-filters').style.display = activeArticleTab === 'all' ? 'flex' : 'none';
+        document.getElementById('mark-all-seen-btn').style.display = activeArticleTab === 'unread' ? '' : 'none';
+        loadArticles();
+      });
+    });
+
+    document.getElementById('filter-read').addEventListener('change', () => { currentPage = 0; loadArticles(); });
+    document.getElementById('filter-relevance').addEventListener('change', () => { currentPage = 0; loadArticles(); });
+
+    // Card kebab menu
+    function toggleCardMenu(id, e) {
+      e.stopPropagation();
+      const menu = document.getElementById('card-menu-' + id);
+      const isOpen = menu.classList.contains('open');
+      document.querySelectorAll('.card-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+      if (!isOpen) menu.classList.add('open');
+    }
+
+    function closeCardMenu(id) {
+      document.getElementById('card-menu-' + id)?.classList.remove('open');
+    }
+
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.card-menu-dropdown.open').forEach(m => m.classList.remove('open'));
+    });
+
     async function markSeen(id) {
       await fetch(`/api/articles/${id}/seen`, { method: 'POST' });
       updateBadge();
+      if (activeArticleTab === 'unread') {
+        document.getElementById(`article-${id}`)?.remove();
+      } else {
+        loadArticles();
+      }
     }
 
-    function toggleFeedback(id) {
-      document.getElementById(`feedback-${id}`).classList.toggle('open');
+    async function markUnseen(id) {
+      await fetch(`/api/articles/${id}/unseen`, { method: 'POST' });
+      loadArticles();
+      updateBadge();
     }
 
-    async function submitFeedback(id) {
-      const reason = document.getElementById(`reason-${id}`).value;
-      await fetch(`/api/articles/${id}/feedback`, {
+    // Dismiss modal
+    let dismissingArticleId = null;
+    const dismissModal = document.getElementById('dismiss-modal');
+
+    function openDismissModal(id) {
+      dismissingArticleId = id;
+      document.getElementById('dismiss-reason-input').value = '';
+      dismissModal.classList.add('open');
+    }
+
+    document.getElementById('dismiss-cancel-btn').addEventListener('click', () => {
+      dismissModal.classList.remove('open');
+      dismissingArticleId = null;
+    });
+
+    dismissModal.addEventListener('click', e => { if (e.target === dismissModal) { dismissModal.classList.remove('open'); dismissingArticleId = null; } });
+
+    document.getElementById('dismiss-confirm-btn').addEventListener('click', async () => {
+      if (!dismissingArticleId) return;
+      const reason = document.getElementById('dismiss-reason-input').value.trim();
+      await fetch(`/api/articles/${dismissingArticleId}/feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason: reason || null }),
       });
-      document.getElementById(`article-${id}`).remove();
+      dismissModal.classList.remove('open');
+      document.getElementById(`article-${dismissingArticleId}`)?.remove();
+      dismissingArticleId = null;
+      updateBadge();
+    });
+
+    // Also allow Enter key in reason input
+    document.getElementById('dismiss-reason-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('dismiss-confirm-btn').click();
+    });
+
+    async function restoreArticle(id) {
+      await fetch(`/api/articles/${id}/restore`, { method: 'POST' });
+      loadArticles();
       updateBadge();
     }
 
     document.getElementById('mark-all-seen-btn').addEventListener('click', async () => {
       await fetch('/api/articles/seen-all', { method: 'POST' });
+      loadArticles();
+      updateBadge();
+    });
+
+    document.getElementById('wipe-articles-btn').addEventListener('click', async () => {
+      if (!confirm('Delete all articles? This cannot be undone.')) return;
+      await fetch('/api/articles', { method: 'DELETE' });
+      loadArticles();
+      updateBadge();
+    });
+
+    document.getElementById('wipe-sources-btn').addEventListener('click', async () => {
+      if (!confirm('Delete all sources and their articles? This cannot be undone.')) return;
+      await fetch('/api/sources', { method: 'DELETE' });
+      loadSources();
       updateBadge();
     });
 
     document.getElementById('fetch-btn').addEventListener('click', async () => {
       const btn = document.getElementById('fetch-btn');
-      btn.textContent = 'Fetching…';
       btn.disabled = true;
+
       try {
         await fetch('/api/fetch', { method: 'POST' });
-        setTimeout(() => { loadArticles(); updateBadge(); btn.textContent = 'Fetch now'; btn.disabled = false; }, 3000);
       } catch {
         btn.textContent = 'Fetch now';
         btn.disabled = false;
+        return;
       }
+
+      // Poll every 4s until the count stops growing, then stop.
+      // Give up after 3 minutes.
+      let lastCount = -1;
+      let stable = 0;
+      const deadline = Date.now() + 3 * 60 * 1000;
+      const elapsed = () => Math.round((Date.now() - (deadline - 3 * 60 * 1000)) / 1000);
+
+      const poll = setInterval(async () => {
+        const res = await fetch('/api/articles/unseen-count');
+        const { count } = await res.json();
+        btn.textContent = `Fetching… (${count} new)`;
+
+        if (count !== lastCount) {
+          lastCount = count;
+          stable = 0;
+          loadArticles();
+          updateBadge();
+        } else {
+          stable++;
+        }
+
+        if (stable >= 3 || Date.now() > deadline) {
+          clearInterval(poll);
+          loadArticles();
+          updateBadge();
+          btn.textContent = 'Fetch now';
+          btn.disabled = false;
+        }
+      }, 4000);
     });
+
+    function startFetchPolling(sourceId) {
+      // Switch to articles view and poll until new articles arrive
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      document.querySelector('nav button[data-view="articles"]').classList.add('active');
+      document.getElementById('view-articles').classList.add('active');
+      document.getElementById('wipe-articles-btn').style.display = '';
+      document.getElementById('wipe-sources-btn').style.display = 'none';
+      document.getElementById('mark-all-seen-btn').style.display = '';
+      document.getElementById('fetch-btn').style.display = '';
+
+      const btn = document.getElementById('fetch-btn');
+      btn.textContent = 'Fetching…';
+      btn.disabled = true;
+
+      let lastCount = -1;
+      let stable = 0;
+      const deadline = Date.now() + 3 * 60 * 1000;
+
+      const poll = setInterval(async () => {
+        const res = await fetch('/api/articles/unseen-count');
+        const { count } = await res.json();
+        btn.textContent = `Fetching… (${count} new)`;
+
+        if (count !== lastCount) {
+          lastCount = count;
+          stable = 0;
+          loadArticles();
+          updateBadge();
+        } else {
+          stable++;
+        }
+
+        if (stable >= 3 || Date.now() > deadline) {
+          clearInterval(poll);
+          loadArticles();
+          updateBadge();
+          btn.textContent = 'Fetch now';
+          btn.disabled = false;
+        }
+      }, 4000);
+    }
+
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    const aiAnalysisModal = document.getElementById('ai-analysis-modal');
+    document.getElementById('close-ai-analysis-btn').addEventListener('click', () => aiAnalysisModal.classList.remove('open'));
+    aiAnalysisModal.addEventListener('click', e => { if (e.target === aiAnalysisModal) aiAnalysisModal.classList.remove('open'); });
+
+    function openAiAnalysis(id, type) {
+      const entry = type === 'article'
+        ? window._articleAnalysis?.[id]
+        : window._sourceAnalysis?.[id];
+      if (!entry) return;
+      document.getElementById('ai-analysis-title').textContent = 'AI Log — ' + entry.name;
+      const body = document.getElementById('ai-analysis-body');
+      try {
+        const log = JSON.parse(entry.notes);
+        body.innerHTML = [
+          '<div class="ai-log-step"><strong>Prompt sent</strong><pre>' + escHtml(log.prompt ?? '—') + '</pre></div>',
+          '<div class="ai-log-step"><strong>Response</strong><pre>' + escHtml(log.raw_response ?? '—') + '</pre></div>',
+        ].join('');
+      } catch {
+        body.innerHTML = '<pre>' + escHtml(entry.notes) + '</pre>';
+      }
+      aiAnalysisModal.classList.add('open');
+    }
 
     // Sources
     async function loadSources() {
@@ -453,17 +997,36 @@
           container.innerHTML = '<div class="empty"><strong>No sources yet</strong><p>Add a source to get started.</p></div>';
           return;
         }
-        container.innerHTML = sources.map(s => `
-          <div class="source-card" id="source-${s.id}">
-            <div class="source-info">
-              <div class="source-name">${s.name ?? s.url}</div>
-              <div class="source-url">${s.url} <span class="source-badge">${s.fetch_type.toUpperCase()}</span></div>
-            </div>
-            <button class="btn" onclick="toggleSource(${s.id}, ${s.active})">${s.active ? 'Pause' : 'Resume'}</button>
-            <button class="btn" onclick="deleteSource(${s.id})" style="color:var(--accent)">Delete</button>
-          </div>
-        `).join('');
+        container.innerHTML = sources.map(s => [
+          '<div class="source-card" id="source-' + s.id + '" onclick="handleSourceCardClick(event,' + s.id + ')" style="cursor:pointer' + (s.color ? ';background:' + s.color + ';border-color:' + s.color : '') + '">',
+            '<div class="source-info">',
+              '<div class="source-name">' + escHtml(s.name ?? s.url) + '</div>',
+              '<div class="source-url">' + escHtml(s.url) + ' <span class="source-badge">' + s.fetch_type.toUpperCase() + '</span></div>',
+            '</div>',
+            '<div class="source-card-actions">',
+              s.analysis_notes ? [
+                '<div style="position:relative">',
+                  '<button class="card-icon-btn" title="More options" onclick="event.stopPropagation(); toggleCardMenu(\'s' + s.id + '\', event)">⋮</button>',
+                  '<div class="card-menu-dropdown" id="card-menu-s' + s.id + '">',
+                    '<button class="card-menu-item" onclick="closeCardMenu(\'s' + s.id + '\'); openAiAnalysis(' + s.id + ', \'source\')">AI log</button>',
+                  '</div>',
+                '</div>',
+              ].join('') : '',
+              '<button class="card-icon-btn" title="' + (s.active ? 'Pause' : 'Resume') + '" onclick="event.stopPropagation(); toggleSource(' + s.id + ',' + s.active + ')">' + (s.active ? '⏸' : '▶') + '</button>',
+              '<button class="card-icon-btn dismiss" title="Delete" onclick="event.stopPropagation(); deleteSource(' + s.id + ')">✕</button>',
+            '</div>',
+          '</div>',
+        ].join('')).join('');
+
+        // Cache analysis notes by source id for the modal
+        window._sourceAnalysis = {};
+        sources.forEach(s => { if (s.analysis_notes) window._sourceAnalysis[s.id] = { name: s.name ?? s.url, notes: s.analysis_notes }; });
       } catch {}
+    }
+
+    function handleSourceCardClick(e, id) {
+      if (e.target.closest('button')) return;
+      openEditModal(id);
     }
 
     async function toggleSource(id, currentActive) {
@@ -475,20 +1038,60 @@
       loadSources();
     }
 
-    async function deleteSource(id) {
-      if (!confirm('Delete this source and all its articles?')) return;
-      await fetch(`/api/sources/${id}`, { method: 'DELETE' });
-      loadSources();
+    let deletingSourceId = null;
+    const deleteSourceModal = document.getElementById('delete-source-modal');
+
+    function deleteSource(id) {
+      deletingSourceId = id;
+      deleteSourceModal.classList.add('open');
     }
+
+    document.getElementById('delete-source-cancel-btn').addEventListener('click', () => {
+      deleteSourceModal.classList.remove('open');
+      deletingSourceId = null;
+    });
+
+    deleteSourceModal.addEventListener('click', e => {
+      if (e.target === deleteSourceModal) { deleteSourceModal.classList.remove('open'); deletingSourceId = null; }
+    });
+
+    document.getElementById('delete-source-confirm-btn').addEventListener('click', async () => {
+      if (!deletingSourceId) return;
+      await fetch(`/api/sources/${deletingSourceId}`, { method: 'DELETE' });
+      deleteSourceModal.classList.remove('open');
+      deletingSourceId = null;
+      loadSources();
+      updateBadge();
+    });
 
     // Add source modal
     const modal = document.getElementById('add-source-modal');
+    let lastAnalysis = null;
     document.getElementById('add-source-btn').addEventListener('click', () => modal.classList.add('open'));
     document.getElementById('cancel-source-btn').addEventListener('click', () => { modal.classList.remove('open'); resetModal(); });
 
+    function validateAddSourceForm() {
+      const url = document.getElementById('source-url-input').value.trim();
+      const type = document.getElementById('source-type-select').value;
+      const feedUrl = document.getElementById('source-feed-url-input').value.trim();
+      const selector = document.getElementById('source-selector-input').value.trim();
+      const ok = url && type && (type === 'rss' ? feedUrl : selector);
+      document.getElementById('save-source-btn').disabled = !ok;
+    }
+
+    document.getElementById('source-url-input').addEventListener('input', validateAddSourceForm);
+    document.getElementById('source-feed-url-input').addEventListener('input', validateAddSourceForm);
+    document.getElementById('source-selector-input').addEventListener('input', validateAddSourceForm);
+
     document.getElementById('source-type-select').addEventListener('change', (e) => {
-      document.getElementById('feed-url-row').style.display = e.target.value === 'rss' ? '' : 'none';
-      document.getElementById('selector-row').style.display = e.target.value === 'html' ? '' : 'none';
+      const type = e.target.value;
+      const isHtml = type === 'html';
+      const isRss = type === 'rss';
+      document.getElementById('feed-url-row').style.display = isRss ? '' : 'none';
+      document.getElementById('selector-row').style.display = isHtml ? '' : 'none';
+      document.getElementById('date-selector-row').style.display = isHtml ? '' : 'none';
+      document.getElementById('image-selector-row').style.display = isHtml ? '' : 'none';
+      validateAddSourceForm();
     });
 
     function resetModal() {
@@ -496,10 +1099,19 @@
       document.getElementById('source-name-input').value = '';
       document.getElementById('source-feed-url-input').value = '';
       document.getElementById('source-selector-input').value = '';
-      document.getElementById('source-type-select').value = 'rss';
-      document.getElementById('feed-url-row').style.display = '';
+      document.getElementById('source-date-selector-input').value = '';
+      document.getElementById('source-image-selector-input').value = '';
+      document.getElementById('source-max-age-select').value = '7';
+      document.getElementById('source-type-select').value = '';
+      document.getElementById('feed-url-row').style.display = 'none';
       document.getElementById('selector-row').style.display = 'none';
+      document.getElementById('date-selector-row').style.display = 'none';
+      document.getElementById('image-selector-row').style.display = 'none';
+      document.getElementById('save-source-btn').disabled = true;
       document.getElementById('analyzed-preview').classList.remove('visible');
+      lastAnalysis = null;
+      addSourceColor = null;
+      renderSwatches('add-color-swatches', null, v => { addSourceColor = v; });
     }
 
     document.getElementById('analyze-btn').addEventListener('click', async () => {
@@ -514,6 +1126,7 @@
           body: JSON.stringify({ url }),
         });
         const data = await res.json();
+        lastAnalysis = data;
         const preview = document.getElementById('analyzed-preview');
         preview.innerHTML = `<strong>Detected configuration</strong>
           Name: ${data.name ?? '—'}<br/>
@@ -531,9 +1144,14 @@
         } else {
           document.getElementById('source-type-select').value = 'html';
           document.getElementById('source-selector-input').value = data.selector ?? '';
+          document.getElementById('source-date-selector-input').value = data.date_selector ?? '';
+          document.getElementById('source-image-selector-input').value = data.image_selector ?? '';
           document.getElementById('feed-url-row').style.display = 'none';
           document.getElementById('selector-row').style.display = '';
+          document.getElementById('date-selector-row').style.display = '';
+          document.getElementById('image-selector-row').style.display = '';
         }
+        validateAddSourceForm();
       } catch {
         alert('Failed to analyze URL');
       } finally {
@@ -547,26 +1165,150 @@
       const fetch_type = document.getElementById('source-type-select').value;
       const feed_url = document.getElementById('source-feed-url-input').value.trim();
       const selector = document.getElementById('source-selector-input').value.trim();
+      const date_selector = document.getElementById('source-date-selector-input').value.trim();
+      const image_selector = document.getElementById('source-image-selector-input').value.trim();
+      const max_age_days = Number(document.getElementById('source-max-age-select').value);
       if (!url) { alert('URL is required'); return; }
 
       try {
         const res = await fetch('/api/sources', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, name: name || null, fetch_type, feed_url: feed_url || null, selector: selector || null }),
+          body: JSON.stringify({ url, name: name || null, fetch_type, feed_url: feed_url || null, selector: selector || null, date_selector: date_selector || null, image_selector: image_selector || null, max_age_days, color: addSourceColor, analysis_notes: lastAnalysis?._log ? JSON.stringify(lastAnalysis._log) : null }),
         });
         if (!res.ok) throw new Error();
+        const { id } = await res.json();
         modal.classList.remove('open');
         resetModal();
         loadSources();
+        startFetchPolling(id);
       } catch {
         alert('Failed to add source');
       }
     });
 
+    // Edit source modal
+    let editingSourceId = null;
+    const editModal = document.getElementById('edit-source-modal');
+
+    document.getElementById('edit-source-type').addEventListener('change', (e) => {
+      const html = e.target.value === 'html';
+      document.getElementById('edit-feed-url-row').style.display = html ? 'none' : '';
+      document.getElementById('edit-selector-row').style.display = html ? '' : 'none';
+      document.getElementById('edit-date-selector-row').style.display = html ? '' : 'none';
+      document.getElementById('edit-image-selector-row').style.display = html ? '' : 'none';
+    });
+
+    async function openEditModal(id) {
+      const res = await fetch('/api/sources');
+      const sources = await res.json();
+      const s = sources.find(x => x.id === id);
+      if (!s) return;
+      editingSourceId = id;
+      document.getElementById('edit-source-name').value = s.name ?? '';
+      document.getElementById('edit-source-type').value = s.fetch_type;
+      document.getElementById('edit-source-feed-url').value = s.feed_url ?? '';
+      document.getElementById('edit-source-selector').value = s.selector ?? '';
+      document.getElementById('edit-source-date-selector').value = s.date_selector ?? '';
+      document.getElementById('edit-source-image-selector').value = s.image_selector ?? '';
+      document.getElementById('edit-source-max-age').value = String(s.max_age_days ?? 7);
+      editSourceColor = s.color ?? null;
+      renderSwatches('edit-color-swatches', editSourceColor, v => { editSourceColor = v; });
+      const html = s.fetch_type === 'html';
+      document.getElementById('edit-feed-url-row').style.display = html ? 'none' : '';
+      document.getElementById('edit-selector-row').style.display = html ? '' : 'none';
+      document.getElementById('edit-date-selector-row').style.display = html ? '' : 'none';
+      document.getElementById('edit-image-selector-row').style.display = html ? '' : 'none';
+      editModal.classList.add('open');
+    }
+
+    document.getElementById('cancel-edit-btn').addEventListener('click', () => {
+      editModal.classList.remove('open');
+      editingSourceId = null;
+    });
+
+    document.getElementById('save-edit-btn').addEventListener('click', async () => {
+      const name = document.getElementById('edit-source-name').value.trim();
+      const fetch_type = document.getElementById('edit-source-type').value;
+      const feed_url = document.getElementById('edit-source-feed-url').value.trim();
+      const selector = document.getElementById('edit-source-selector').value.trim();
+      const date_selector = document.getElementById('edit-source-date-selector').value.trim();
+      const image_selector = document.getElementById('edit-source-image-selector').value.trim();
+      const max_age_days = Number(document.getElementById('edit-source-max-age').value);
+      try {
+        const res = await fetch(`/api/sources/${editingSourceId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name || null, fetch_type, feed_url: feed_url || null, selector: selector || null, date_selector: date_selector || null, image_selector: image_selector || null, max_age_days, color: editSourceColor }),
+        });
+        if (!res.ok) throw new Error();
+        editModal.classList.remove('open');
+        editingSourceId = null;
+        loadSources();
+        loadArticles();
+      } catch {
+        alert('Failed to save source');
+      }
+    });
+
+    // Color palette
+    const SOURCE_COLORS = [
+      { value: '#fdf6e3', label: 'Sand' },
+      { value: '#fde8d8', label: 'Peach' },
+      { value: '#fce4ec', label: 'Rose' },
+      { value: '#f3e5f5', label: 'Lavender' },
+      { value: '#e8eaf6', label: 'Indigo' },
+      { value: '#e3f2fd', label: 'Sky' },
+      { value: '#e0f7fa', label: 'Cyan' },
+      { value: '#e8f5e9', label: 'Mint' },
+      { value: '#f1f8e9', label: 'Lime' },
+      { value: '#fffde7', label: 'Lemon' },
+    ];
+
+    function renderSwatches(containerId, selectedColor, onSelect) {
+      const container = document.getElementById(containerId);
+      const none = document.createElement('button');
+      none.type = 'button';
+      none.className = 'color-swatch none' + (!selectedColor ? ' selected' : '');
+      none.title = 'No color';
+      none.addEventListener('click', () => { onSelect(null); renderSwatches(containerId, null, onSelect); });
+      container.innerHTML = '';
+      container.appendChild(none);
+      SOURCE_COLORS.forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'color-swatch' + (selectedColor === c.value ? ' selected' : '');
+        btn.style.background = c.value;
+        btn.title = c.label;
+        btn.addEventListener('click', () => { onSelect(c.value); renderSwatches(containerId, c.value, onSelect); });
+        container.appendChild(btn);
+      });
+    }
+
+    let addSourceColor = null;
+    let editSourceColor = null;
+
+    renderSwatches('add-color-swatches', null, v => { addSourceColor = v; });
+    renderSwatches('edit-color-swatches', null, v => { editSourceColor = v; });
+
     // Init
+    let adminMode = false;
+
+    async function initConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const cfg = await res.json();
+        adminMode = cfg.adminMode;
+        if (adminMode) {
+          document.getElementById('wipe-articles-btn').style.display = '';
+          document.getElementById('fetch-btn').style.display = '';
+        }
+      } catch {}
+    }
+
     loadArticles();
     updateBadge();
+    initConfig();
     setInterval(updateBadge, 5 * 60 * 1000);
   </script>
 </body>
