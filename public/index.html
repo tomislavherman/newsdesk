@@ -79,7 +79,99 @@
       margin-left: auto;
       display: flex;
       gap: 0.5rem;
+      align-items: center;
     }
+
+    .header-user {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    /* Auth overlay */
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .auth-card h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.8rem;
+      text-align: center;
+      margin-bottom: 1.75rem;
+    }
+
+    .auth-card h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+    }
+
+    .auth-row { margin-bottom: 0.65rem; }
+
+    .auth-row input {
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+    }
+
+    .auth-error {
+      color: var(--accent);
+      font-size: 0.82rem;
+      margin-bottom: 0.5rem;
+      min-height: 1.2em;
+    }
+
+    .auth-switch {
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 0.75rem;
+    }
+
+    .auth-switch a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+    /* Admin panel */
+    .admin-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+
+    .admin-section h3 {
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .users-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .users-table th { text-align: left; padding: 0.4rem 0.5rem; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--border); }
+    .users-table td { padding: 0.5rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .users-table select { font-family: 'DM Sans', sans-serif; font-size: 0.82rem; padding: 0.2rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); }
 
     .btn {
       padding: 0.4rem 0.9rem;
@@ -449,12 +541,17 @@
         Articles <span class="badge" id="unseen-badge"></span>
       </button>
       <button data-view="sources">Sources</button>
+      <button data-view="admin" id="admin-nav-btn" style="display:none">Admin</button>
     </nav>
     <div class="header-actions">
       <button class="btn" id="mark-all-seen-btn">Mark all seen</button>
       <button class="btn" id="wipe-articles-btn" style="color:var(--accent);display:none">Wipe articles</button>
       <button class="btn" id="wipe-sources-btn" style="color:var(--accent);display:none">Wipe sources</button>
       <button class="btn" id="fetch-btn" style="display:none">Fetch now</button>
+    </div>
+    <div class="header-user" id="header-user" style="display:none">
+      <span id="header-username"></span>
+      <button class="btn" id="logout-btn">Sign out</button>
     </div>
   </header>
 
@@ -486,7 +583,53 @@
       </div>
       <div id="sources-list"></div>
     </div>
+    <div class="view" id="view-admin">
+      <div class="admin-section">
+        <h3>Settings</h3>
+        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer">
+          <input type="checkbox" id="auto-approve-toggle"> Auto-approve new users
+        </label>
+      </div>
+      <div class="admin-section">
+        <h3>Users</h3>
+        <table class="users-table">
+          <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </main>
+
+  <!-- Auth overlay -->
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="auth-card">
+      <h1>Newsdesk</h1>
+
+      <div id="auth-login-form">
+        <h2>Sign in</h2>
+        <div class="auth-error" id="login-error"></div>
+        <div class="auth-row"><input type="text" id="login-username" placeholder="Username" autocomplete="username" /></div>
+        <div class="auth-row"><input type="password" id="login-password" placeholder="Password" autocomplete="current-password" /></div>
+        <button class="btn btn-primary" id="login-btn" style="width:100%">Sign in</button>
+        <div class="auth-switch">No account? <a onclick="showAuthForm('signup')">Sign up</a></div>
+      </div>
+
+      <div id="auth-signup-form" style="display:none">
+        <h2>Create account</h2>
+        <div class="auth-error" id="signup-error"></div>
+        <div class="auth-row"><input type="text" id="signup-username" placeholder="Username" autocomplete="username" /></div>
+        <div class="auth-row"><input type="password" id="signup-password" placeholder="Password (min 6 chars)" autocomplete="new-password" /></div>
+        <button class="btn btn-primary" id="signup-btn" style="width:100%">Create account</button>
+        <div class="auth-switch">Have an account? <a onclick="showAuthForm('login')">Sign in</a></div>
+      </div>
+
+      <div id="auth-pending-form" style="display:none">
+        <h2>Awaiting approval</h2>
+        <p style="font-size:0.9rem;color:var(--muted);margin-bottom:1rem">Your account is pending admin approval. You will be able to sign in once approved.</p>
+        <button class="btn" style="width:100%" onclick="doLogout()">Sign out</button>
+      </div>
+    </div>
+  </div>
 
   <!-- AI log modal -->
   <div class="modal-overlay" id="ai-analysis-modal">
@@ -647,14 +790,18 @@
         document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
         btn.classList.add('active');
         document.getElementById(`view-${btn.dataset.view}`).classList.add('active');
-        const onSources = btn.dataset.view === 'sources';
-        if (adminMode) {
-          document.getElementById('wipe-articles-btn').style.display = onSources ? 'none' : '';
+        const view = btn.dataset.view;
+        const onSources = view === 'sources';
+        const onAdmin = view === 'admin';
+        const onArticles = view === 'articles';
+        if (currentUser?.role === 'admin') {
+          document.getElementById('wipe-articles-btn').style.display = onArticles ? '' : 'none';
           document.getElementById('wipe-sources-btn').style.display = onSources ? '' : 'none';
-          document.getElementById('fetch-btn').style.display = onSources ? 'none' : '';
+          document.getElementById('fetch-btn').style.display = onArticles ? '' : 'none';
         }
-        document.getElementById('mark-all-seen-btn').style.display = onSources ? 'none' : '';
+        document.getElementById('mark-all-seen-btn').style.display = onArticles ? '' : 'none';
         if (onSources) loadSources();
+        if (onAdmin) loadAdminPanel();
       });
     });
 
@@ -679,10 +826,25 @@
       return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
+    async function renderEmptyArticles() {
+      const container = document.getElementById('articles-list');
+      try {
+        const res = await fetch('/api/sources');
+        const sources = await res.json();
+        if (!sources.length) {
+          container.innerHTML = '<div class="empty"><strong>No articles yet</strong><p>Add a source to get started.</p></div>';
+        } else {
+          container.innerHTML = '<div class="empty"><strong>All caught up</strong><p>No new articles right now. Check back later.</p></div>';
+        }
+      } catch {
+        container.innerHTML = '<div class="empty"><strong>No articles</strong></div>';
+      }
+    }
+
     function renderArticles(articles) {
       const container = document.getElementById('articles-list');
       if (!articles.length) {
-        container.innerHTML = '<div class="empty"><strong>No articles yet</strong><p>Add a source and click "Fetch now" to get started.</p></div>';
+        renderEmptyArticles();
         return;
       }
 
@@ -923,10 +1085,11 @@
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.querySelector('nav button[data-view="articles"]').classList.add('active');
       document.getElementById('view-articles').classList.add('active');
-      document.getElementById('wipe-articles-btn').style.display = '';
+      const isAdmin = currentUser?.role === 'admin';
+      document.getElementById('wipe-articles-btn').style.display = isAdmin ? '' : 'none';
       document.getElementById('wipe-sources-btn').style.display = 'none';
       document.getElementById('mark-all-seen-btn').style.display = '';
-      document.getElementById('fetch-btn').style.display = '';
+      document.getElementById('fetch-btn').style.display = isAdmin ? '' : 'none';
 
       const btn = document.getElementById('fetch-btn');
       btn.textContent = 'Fetching…';
@@ -1291,25 +1454,172 @@
     renderSwatches('add-color-swatches', null, v => { addSourceColor = v; });
     renderSwatches('edit-color-swatches', null, v => { editSourceColor = v; });
 
-    // Init
-    let adminMode = false;
+    // ── Auth ──────────────────────────────────────────────────────────────
 
-    async function initConfig() {
+    let currentUser = null;
+
+    function showAuthForm(which) {
+      ['login', 'signup', 'pending'].forEach(f => {
+        document.getElementById('auth-' + f + '-form').style.display = f === which ? '' : 'none';
+      });
+    }
+
+    function showAuthOverlay(form = 'login') {
+      showAuthForm(form);
+      document.getElementById('auth-overlay').style.display = 'flex';
+    }
+
+    function hideAuthOverlay() {
+      document.getElementById('auth-overlay').style.display = 'none';
+    }
+
+    function applyUserRole(user) {
+      currentUser = user;
+      document.getElementById('header-username').textContent = user.username;
+      document.getElementById('header-user').style.display = 'flex';
+      if (user.role === 'admin') {
+        document.getElementById('admin-nav-btn').style.display = '';
+        document.getElementById('wipe-articles-btn').style.display = '';
+        document.getElementById('fetch-btn').style.display = '';
+      }
+    }
+
+    async function initAuth() {
       try {
-        const res = await fetch('/api/config');
-        const cfg = await res.json();
-        adminMode = cfg.adminMode;
-        if (adminMode) {
-          document.getElementById('wipe-articles-btn').style.display = '';
-          document.getElementById('fetch-btn').style.display = '';
-        }
+        const res = await fetch('/api/auth/me');
+        const { user } = await res.json();
+        if (!user) { showAuthOverlay('login'); return; }
+        if (!user.approved) { showAuthOverlay('pending'); return; }
+        applyUserRole(user);
+        hideAuthOverlay();
+        loadArticles();
+        updateBadge();
+        setInterval(updateBadge, 5 * 60 * 1000);
+      } catch { showAuthOverlay('login'); }
+    }
+
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+      const err = document.getElementById('login-error');
+      err.textContent = '';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) { err.textContent = data.error; return; }
+        applyUserRole(data.user);
+        hideAuthOverlay();
+        loadArticles();
+        updateBadge();
+        setInterval(updateBadge, 5 * 60 * 1000);
+      } catch { err.textContent = 'Login failed. Try again.'; }
+    });
+
+    document.getElementById('login-password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('login-btn').click();
+    });
+
+    document.getElementById('signup-btn').addEventListener('click', async () => {
+      const username = document.getElementById('signup-username').value.trim();
+      const password = document.getElementById('signup-password').value;
+      const err = document.getElementById('signup-error');
+      err.textContent = '';
+      try {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) { err.textContent = data.error; return; }
+        if (data.pending) { showAuthForm('pending'); return; }
+        applyUserRole(data.user);
+        hideAuthOverlay();
+        loadArticles();
+        updateBadge();
+        setInterval(updateBadge, 5 * 60 * 1000);
+      } catch { err.textContent = 'Signup failed. Try again.'; }
+    });
+
+    document.getElementById('signup-password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('signup-btn').click();
+    });
+
+    async function doLogout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      currentUser = null;
+      document.getElementById('header-user').style.display = 'none';
+      document.getElementById('admin-nav-btn').style.display = 'none';
+      document.getElementById('wipe-articles-btn').style.display = 'none';
+      document.getElementById('fetch-btn').style.display = 'none';
+      showAuthOverlay('login');
+    }
+
+    document.getElementById('logout-btn').addEventListener('click', doLogout);
+
+    // ── Admin panel ────────────────────────────────────────────────────────
+
+    async function loadAdminPanel() {
+      // Settings
+      try {
+        const res = await fetch('/api/admin/settings');
+        const { auto_approve } = await res.json();
+        document.getElementById('auto-approve-toggle').checked = auto_approve;
+      } catch {}
+
+      // Users
+      try {
+        const res = await fetch('/api/admin/users');
+        const users = await res.json();
+        const tbody = document.getElementById('users-tbody');
+        tbody.innerHTML = users.map(u => [
+          '<tr>',
+            '<td>' + escHtml(u.username) + '</td>',
+            '<td>',
+              u.id === currentUser.id
+                ? '<span style="color:var(--muted)">' + u.role + '</span>'
+                : '<select onchange="updateUserRole(' + u.id + ', this.value, ' + u.approved + ')">'
+                  + '<option value="user"' + (u.role === 'user' ? ' selected' : '') + '>user</option>'
+                  + '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option>'
+                  + '</select>',
+            '</td>',
+            '<td>',
+              u.approved
+                ? '<span style="color:var(--muted)">approved</span>'
+                : '<button class="btn" onclick="approveUser(' + u.id + ', \'' + escHtml(u.role) + '\')">Approve</button>',
+            '</td>',
+            '<td></td>',
+          '</tr>',
+        ].join('')).join('');
       } catch {}
     }
 
-    loadArticles();
-    updateBadge();
-    initConfig();
-    setInterval(updateBadge, 5 * 60 * 1000);
+    document.getElementById('auto-approve-toggle').addEventListener('change', async (e) => {
+      await fetch('/api/admin/settings', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auto_approve: e.target.checked }),
+      });
+    });
+
+    async function approveUser(id, role) {
+      await fetch('/api/admin/users/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved: true, role }),
+      });
+      loadAdminPanel();
+    }
+
+    async function updateUserRole(id, role, approved) {
+      await fetch('/api/admin/users/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, approved }),
+      });
+    }
+
+    // Init
+    initAuth();
   </script>
 </body>
 </html>

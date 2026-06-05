@@ -1,14 +1,8 @@
-# Newsdesk — Project Handoff Document
+# Newsdesk
 
-This document gives Claude Code full context to take over development of the Newsdesk project.
+A personal news reader with AI-powered relevance filtering. It periodically fetches articles from configured news sources, uses Claude to classify relevance and generate summaries, and serves a minimal web UI where users can read articles and provide feedback.
 
----
-
-## What this project is
-
-A personal news reader with AI-powered relevance filtering. It periodically fetches articles from configured news sources, uses Claude to classify relevance and generate summaries, and serves a minimal web UI where the user can read articles and provide feedback. Feedback is used to improve future classification.
-
-**This is a personal side project** — one user, one server, no scale requirements. Decisions should favor simplicity over sophistication.
+**This is a personal side project** — decisions should favor simplicity over sophistication.
 
 ---
 
@@ -18,13 +12,13 @@ A personal news reader with AI-powered relevance filtering. It periodically fetc
 |---|---|---|
 | Runtime | Node.js 20 (ES modules) | Developer preference |
 | Web framework | Fastify v5 | Modern, fast, minimal |
-| Database | SQLite via better-sqlite3 | Zero ops, single user, more than sufficient |
+| Database | SQLite via better-sqlite3 | Zero ops, no scale requirements |
 | AI | Anthropic Claude Haiku (`claude-haiku-4-5-20251001`) | Cheap, fast, sufficient for classification |
 | Scheduling | node-cron (inside same process) | Avoids second systemd unit |
 | HTML parsing | cheerio | CSS selector based scraping |
 | RSS parsing | rss-parser | Standard RSS/Atom handling |
 | HTTP client | undici (fetch) | Built into Node ecosystem |
-| Process manager | systemd | Standard Linux, learning goal for developer |
+| Process manager | systemd | Standard Linux |
 | Access | Tailscale Serve | Developer accesses only from own devices via Tailnet |
 
 ---
@@ -32,10 +26,11 @@ A personal news reader with AI-powered relevance filtering. It periodically fetc
 ## Project structure
 
 ```
-news-app/
+newsdesk/
 ├── src/
 │   ├── index.js        # Fastify server, all API routes, cron scheduler
 │   ├── db.js           # SQLite schema + all database access functions
+│   ├── auth.js         # Password hashing (crypto.scrypt) + session token generation
 │   ├── ai.js           # Claude integration (source analysis + classification)
 │   └── fetcher.js      # RSS + HTML article fetching logic
 ├── public/
@@ -43,61 +38,119 @@ news-app/
 ├── newsdesk.service    # systemd unit file for Oracle VM deployment
 ├── .env.example        # Environment variable template
 ├── package.json
-└── README.md           # Setup and deployment instructions
+└── README.md
 ```
+
+---
+
+## Authentication system
+
+Users authenticate with username + password. Sessions are stored in SQLite and sent as `HttpOnly` cookies (30-day expiry). Passwords hashed with `crypto.scrypt` — no bcrypt dependency.
+
+**User roles:**
+- First user to sign up becomes `admin` (approved automatically)
+- Subsequent users get role `user`, status `approved = 0` (pending)
+- Admin can approve users, toggle roles between `user` and `admin`
+- Admin cannot change their own role
+- Unapproved users see a "pending approval" screen, not the app
+
+**Auto-approve setting**: admin can toggle `auto_approve` in the settings panel — when on, new signups are immediately approved.
+
+**Admin capabilities** (gated by `role === 'admin'` in both backend and frontend):
+- Wipe articles / Wipe sources buttons
+- Manual "Fetch now" button
+- Admin panel tab (user management + auto-approve toggle)
+
+**Public API paths** (no auth required): `/api/auth/login`, `/api/auth/signup`, `/api/auth/me`
+
+**Admin API paths**: `/api/admin/*` — returns 403 if not admin
 
 ---
 
 ## Database schema
 
-Three tables in SQLite (`news.db` in project root):
+Six tables in SQLite (`news.db` in project root):
 
 ```sql
--- News sources added by user at runtime
-CREATE TABLE sources (
+CREATE TABLE users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  url TEXT NOT NULL UNIQUE,       -- homepage URL
-  name TEXT,                      -- human readable name
-  feed_url TEXT,                  -- RSS feed URL if detected, else null
-  selector TEXT,                  -- CSS selector for HTML scraping if no RSS
-  fetch_type TEXT CHECK(fetch_type IN ('rss', 'html')) NOT NULL DEFAULT 'html',
-  active INTEGER DEFAULT 1,       -- can be paused without deleting
+  username TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,         -- scrypt: "salt:hash"
+  role TEXT NOT NULL DEFAULT 'user',   -- 'user' | 'admin'
+  approved INTEGER NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Articles fetched from sources
+CREATE TABLE sessions (
+  token TEXT PRIMARY KEY,              -- 64-byte hex random
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  expires_at DATETIME NOT NULL         -- 30 days from creation
+);
+
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
+-- News sources — scoped to users
+CREATE TABLE sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  name TEXT,
+  feed_url TEXT,
+  selector TEXT,
+  fetch_type TEXT CHECK(fetch_type IN ('rss', 'html')) NOT NULL DEFAULT 'html',
+  active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id, url)
+);
+
 CREATE TABLE articles (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source_id INTEGER REFERENCES sources(id) ON DELETE CASCADE,
-  url TEXT NOT NULL UNIQUE,       -- deduplicated by URL
+  url TEXT NOT NULL UNIQUE,
   title TEXT,
-  summary TEXT,                   -- Claude-generated 2-3 sentence neutral summary
+  summary TEXT,                        -- Claude-generated 2-3 sentence neutral summary
   published_at DATETIME,
   fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  is_relevant INTEGER DEFAULT 1,  -- 0 = filtered out by Claude or dismissed by user
-  relevance_reason TEXT,          -- Claude's one-sentence explanation
-  seen INTEGER DEFAULT 0          -- user has viewed/clicked
+  is_relevant INTEGER DEFAULT 1,
+  relevance_reason TEXT,
+  seen INTEGER DEFAULT 0
 );
 
--- User "Not interested" dismissals
 CREATE TABLE feedback (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   article_id INTEGER REFERENCES articles(id) ON DELETE CASCADE,
-  reason TEXT,                    -- optional free text from user
+  reason TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+**Per-user isolation**: sources carry `user_id`; articles are scoped via JOIN through their source. Feedback learning (`getRecentFeedback`) is also user-scoped.
+
+**Cron exception**: `getActiveSources()` (used by the cron job) returns all users' sources — fetch runs across all users.
+
+**Orphaned sources**: pre-auth sources with `user_id = NULL` are claimed by the first admin on signup via `claimOrphanedSources(userId)`.
 
 ---
 
 ## API routes
 
-All routes are in `src/index.js`.
+All routes in `src/index.js`. All `/api/*` routes (except public paths above) require a valid session cookie.
+
+### Auth
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/auth/me` | Returns `{ user }` or `{ user: null }` |
+| POST | `/api/auth/signup` | Body: `{ username, password }`. Returns `{ user }` or `{ pending: true }` |
+| POST | `/api/auth/login` | Body: `{ username, password }`. Returns `{ user }` |
+| POST | `/api/auth/logout` | Clears session cookie |
 
 ### Articles
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/articles` | List articles. Query params: `limit`, `offset`, `unseen=true` |
+| GET | `/api/articles` | List articles (current user only). Params: `limit`, `offset`, `unseen=true` |
 | POST | `/api/articles/:id/seen` | Mark single article as seen |
 | POST | `/api/articles/seen-all` | Mark all relevant articles as seen |
 | POST | `/api/articles/:id/feedback` | Dismiss article. Body: `{ reason?: string }` |
@@ -105,13 +158,21 @@ All routes are in `src/index.js`.
 ### Sources
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/sources` | List all sources |
-| POST | `/api/sources/analyze` | Analyze a URL (calls Claude). Body: `{ url }`. Returns detected config |
-| POST | `/api/sources` | Add a source using analyzed config |
+| GET | `/api/sources` | List sources (current user only) |
+| POST | `/api/sources/analyze` | Analyze a URL (calls Claude). Body: `{ url }` |
+| POST | `/api/sources` | Add a source |
 | PATCH | `/api/sources/:id` | Toggle active. Body: `{ active: boolean }` |
 | DELETE | `/api/sources/:id` | Delete source and its articles |
 
-### Utility
+### Admin (role=admin only)
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/admin/users` | List all users (no password_hash) |
+| PATCH | `/api/admin/users/:id` | Update `role` and/or `approved`. Cannot change own role. |
+| GET | `/api/admin/settings` | Returns `{ auto_approve: boolean }` |
+| PATCH | `/api/admin/settings` | Body: `{ auto_approve: boolean }` |
+
+### Utility (admin only)
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/fetch` | Trigger a fetch cycle manually (runs in background) |
@@ -120,38 +181,36 @@ All routes are in `src/index.js`.
 
 ## AI integration (src/ai.js)
 
-Two Claude calls, both using Haiku and expecting JSON responses:
+Two Claude calls, both using Haiku and expecting JSON responses.
 
-### 1. `analyzeSource(url, html)`
-Called once when a user adds a new source. Sends the first 15,000 chars of the page HTML to Claude and asks it to:
-- Detect RSS feed URL (from `<link rel="alternate">` tags)
-- If no RSS: identify a CSS selector for article containers
-- Suggest a human-readable source name
+### `analyzeSource(url, html)`
+Called once when a user adds a new source. Sends the first 15,000 chars of HTML. Only uses explicit `<link rel="alternate">` tags to detect RSS — does NOT guess common paths like `/rss.xml` (caused wrong feeds in practice).
 
 Returns: `{ has_rss, feed_url, selector, name }`
 
-### 2. `classifyArticle(title, content)`
-Called for every new article during a fetch cycle. Includes the last 20 user feedback dismissals as context so Claude learns preferences over time.
+### `classifyArticle(title, content, userId)`
+Called for every new article during a fetch cycle. Includes the last 20 feedback dismissals for that user as context. `userId` is passed from `fetcher.js` via `source.user_id`.
 
 Returns: `{ is_relevant, reason, summary }`
 
-Both functions parse JSON from Claude's response with a fallback regex extraction in case Claude adds surrounding text.
+Both functions parse JSON with a fallback regex in case Claude adds surrounding text.
 
 ---
 
 ## Fetch cycle logic (src/fetcher.js)
 
-`fetchAllSources()` is the main entry point, called by cron and the manual fetch endpoint:
+`fetchAllSources()` is the main entry point, called by cron (every 10 min) and the manual fetch endpoint:
 
-1. Gets all active sources from DB
+1. Gets all active sources from DB (all users, no filter)
 2. For each source:
-   - If `fetch_type = 'rss'`: uses `rss-parser` to fetch the feed URL
-   - If `fetch_type = 'html'`: fetches the source URL, loads with cheerio, applies CSS selector
-3. For each article found, checks if URL already exists in DB (deduplication)
-4. For new articles: calls `classifyArticle()`, stores result
-5. Logs counts at each step
+   - `rss`: uses `rss-parser`. If RSS parse fails, returns `[]` silently (guards against sources stored as wrong type)
+   - `html`: fetches the URL, loads with cheerio, applies CSS selector
+3. Deduplicates new articles by URL
+4. For new articles: calls `classifyArticle(title, content, source.user_id)`, stores result
 
-`detectSourceConfig(url)` is the source setup helper — fetches the page and calls `analyzeSource()`.
+**HN-specific fixes applied**: title rank numbers stripped (`/^\d+[.)]\s*/`), article link scoring prefers external links and longest text to avoid vote-arrow anchors.
+
+`detectSourceConfig(url)` — fetches page, calls `analyzeSource()`.
 
 ---
 
@@ -159,92 +218,83 @@ Both functions parse JSON from Claude's response with a fallback regex extractio
 
 Single HTML file, vanilla JS, no build step, no framework.
 
-**Design**: Editorial aesthetic. Playfair Display (serif) for headings, DM Sans for body. Warm off-white background (`#f5f2ed`). Red accent (`#c0392b`) for source tags and unread badge. Clean card layout.
+**Design**: Editorial aesthetic. Playfair Display (serif) for headings, DM Sans for body. Warm off-white background (`#f5f2ed`). Red accent (`#c0392b`) for source tags and unread badge.
 
-**Two views** (tab-switched, no routing):
-- **Articles** — card list with title, source tag, date, summary, "Read full article" link, "Not interested" button with inline feedback form
-- **Sources** — list of configured sources with pause/resume and delete, plus "Add source" button
+**Views** (tab-switched, no routing):
+- **Articles** — card list with title, source tag, date, summary, "Read full article", "Not interested"
+- **Sources** — configured sources with pause/resume, delete, and "Add source"
+- **Admin** — visible only to admins; user table (approve, change role) + auto-approve toggle
 
-**Add source flow**:
-1. User pastes URL
-2. Clicks "Analyze URL" → calls `/api/sources/analyze` → shows detected config preview
-3. User clicks "Add source" → calls `/api/sources`
+**Auth overlay**: shown before app loads. Three states: login form, signup form, pending-approval message. `initAuth()` calls `/api/auth/me` on load to decide which state to show.
 
-**Unread badge**: shown in header, updates on load and every 5 minutes via polling.
+**Add source flow**: paste URL → "Analyze URL" → preview detected config → "Add source"
+
+**Unread badge**: shown in header, updates on load and every 5 minutes.
+
+**Admin buttons** (Wipe articles, Fetch now): shown only when `currentUser.role === 'admin'`. No `ADMIN_MODE` env var — that has been removed.
 
 ---
 
 ## Deployment target
 
-**Server**: Oracle Cloud free tier VM — `VM.Standard.E2.1.Micro` (AMD, 1/8 OCPU shared, 1GB RAM, x86).
-The developer is also trying to provision a `VM.Standard.A1.Flex` (ARM, 4 OCPU, 24GB RAM) but it's currently showing "Out of capacity". Code should work on both architectures.
+**Server**: Oracle Cloud free tier VM — `VM.Standard.E2.1.Micro` (AMD, 1/8 OCPU shared, 1GB RAM, x86). Also targeting `VM.Standard.A1.Flex` (ARM, 4 OCPU, 24GB RAM) when available.
 
-**OS**: Ubuntu 24 (assumed, standard Oracle Cloud image)
+**OS**: Ubuntu 24
 
-**Access**: Tailscale Serve on port 3000. The app binds to `127.0.0.1` by default — Tailscale Serve proxies to it. No public ports needed beyond SSH (22).
+**Access**: Tailscale Serve on port 3000. App binds to `127.0.0.1`.
 
-**Process management**: systemd. `newsdesk.service` is the unit file. `EnvironmentFile` points to `.env` in the project directory for secrets.
+**Process management**: systemd (`newsdesk.service`). `EnvironmentFile` points to `.env`.
 
-**Deployment method**: Currently rsync + SSH or git pull, manual. No CI/CD yet.
+**Deployment**: manual rsync + SSH or git pull.
 
 ---
 
 ## Environment variables
 
 ```
-ANTHROPIC_API_KEY=   # Required. Get from platform.claude.com
+ANTHROPIC_API_KEY=   # Required
 PORT=3000            # Optional, defaults to 3000
-HOST=127.0.0.1       # Optional, defaults to 127.0.0.1 (Tailscale Serve handles external access)
+HOST=127.0.0.1       # Optional, defaults to 127.0.0.1
 ```
 
-`.env` file is excluded from deployment syncs. Managed manually on server. Never committed to git.
+`.env` is gitignored and managed manually on the server. Never committed.
 
 ---
 
-## Key decisions and their rationale
+## Key decisions and rationale
 
-**SQLite over Oracle Autonomous DB or MySQL**: zero ops, no network config, no auth setup. Appropriate for single-user scale. The free Oracle DB options (Autonomous DB requires wallet files + native C++ driver; MySQL requires separate service setup) add friction with no benefit at this scale.
+**`crypto.scrypt` over bcrypt**: avoids adding a dependency; Node built-in is sufficient for this use case.
 
-**Haiku over Sonnet/Opus**: classification and summarization are not hard reasoning tasks. Haiku handles them well at ~10x lower cost. Estimated monthly cost with batch processing: $3-7.
+**Sessions in SQLite over JWTs**: simpler, revocable, consistent with the rest of the stack. 30-day expiry, deleted on logout.
 
-**node-cron inside web process over systemd timer**: one systemd unit is simpler to manage than two. The cron job is lightweight (HTTP calls out, DB writes) and doesn't interfere with request handling.
+**Per-user source/article isolation via `user_id` FK**: clean cascade deletes, no cross-user leakage. Cron intentionally bypasses user filter to fetch all sources in one cycle.
 
-**No frontend framework**: the UI is simple enough that React/Vue would add build tooling complexity with no benefit. Vanilla JS is sufficient and keeps deployment trivial (static file, no build step).
+**SQLite over Oracle Autonomous DB or MySQL**: zero ops, no network config. The free Oracle DB options add friction with no benefit at this scale.
 
-**Feedback as prompt context over vector embeddings**: simpler, transparent, and sufficient. Claude receives the last 20 dismissals as plain text and pattern-matches from examples. A vector database would add significant infrastructure complexity for marginal improvement at this scale (100 articles/day).
+**Haiku over Sonnet/Opus**: classification and summarization are not hard reasoning tasks. Estimated monthly cost: $3–7.
 
-**Two-step source add (analyze then confirm)**: gives the user visibility into what Claude detected before committing. Avoids silent failures where a wrong CSS selector is stored and silently fetches nothing.
+**node-cron inside web process over systemd timer**: one systemd unit is simpler to manage than two.
+
+**No frontend framework**: vanilla JS is sufficient; keeps deployment trivial.
+
+**Feedback as prompt context over vector embeddings**: Claude receives the last 20 dismissals as plain text. Vector DB would add infrastructure complexity for marginal improvement at this scale.
+
+**RSS detection from `<link rel="alternate">` only**: common-path guessing (`/rss.xml`, `/feed`) caused wrong feeds (e.g. sitewide feed instead of topic feed).
 
 ---
 
 ## Known limitations and future improvements
 
-These are known gaps, not bugs. Tackle in priority order as needed:
+1. **No error recovery for bad selectors**: articles silently fail. Should add a "last fetch result" field to sources and surface errors in UI.
 
-1. **No error recovery for bad selectors**: if Claude picks a wrong CSS selector for a source, articles silently fail to fetch. Should add a "last fetch result" field to sources and surface errors in the UI.
+2. **Article content for classification is shallow**: fetcher uses selector container text (headline + teaser). Better classification would fetch the full article page.
 
-2. **Article content for classification is shallow**: the fetcher only uses text from the selector container, which may be just a headline + teaser. Better classification would fetch the full article page for content. Trade-off: more API calls to news sites, slower fetch cycle.
+3. **No pagination in UI**: loads up to 100 articles.
 
-3. **No pagination in UI**: loads up to 100 articles. Fine for now, will need pagination eventually.
+4. **Summary length and style are hardcoded**: 2-3 sentences, neutral. Could be user-configurable via the `settings` table.
 
-4. **Summary length and style are hardcoded**: currently 2-3 sentences, neutral factual. Developer wants these as user-configurable settings. A `settings` table in SQLite and a settings page in the UI would cover this.
+5. **No dark mode**: CSS variables are in place; adding a dark theme is a small CSS addition.
 
-5. **No dark mode**: CSS variables are in place, adding a dark theme is a small CSS addition.
+6. **Fetch runs serially**: fine for ~10 sources. Could parallelize with `Promise.allSettled()` if slow.
 
-6. **Fetch runs serially**: sources are processed one by one. For 10 sources this is fine. Could be parallelized with `Promise.allSettled()` if fetch cycle becomes slow.
-
-7. **No notification beyond badge**: developer checks the site periodically. Could add optional push notifications or email digest later.
-
----
-
-## How to get started as Claude Code
-
-1. Read this document fully first
-2. Run `npm install` to install dependencies
-3. Copy `.env.example` to `.env` and add a real `ANTHROPIC_API_KEY`
-4. Run `npm run dev` and verify the server starts
-5. Open `http://localhost:3000` and verify the UI loads
-6. Add a test source (e.g. a news site with RSS) and click "Fetch now"
-7. Check `journalctl` equivalent (`console` output in dev) for fetch logs
-
-Ask the developer what they want to work on next before making changes.
+7. **No notification beyond badge**: periodic checking only. Could add push notifications or email digest.

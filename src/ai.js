@@ -55,8 +55,8 @@ Return only valid JSON, no explanation.`;
   };
 }
 
-export async function summarizeArticle(title, content) {
-  const recentFeedback = getRecentFeedback(20);
+export async function summarizeArticle(title, content, userId = null) {
+  const recentFeedback = userId ? getRecentFeedback(userId, 20) : [];
 
   const feedbackSection = recentFeedback.length > 0
     ? `\nThe user has previously dismissed these articles as not interesting:\n${recentFeedback.map(f => `- "${f.title}"${f.reason ? ` (reason: ${f.reason})` : ''}`).join('\n')}\n\nBased only on these dismissals, set is_relevant to false if this article clearly matches the same pattern. If there is no clear match, default to true.`

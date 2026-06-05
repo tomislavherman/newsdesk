@@ -184,7 +184,7 @@ async function processSource(source) {
       const { content, image_url: pageImage } = await fetchArticlePage(article.url);
       const image_url = article.image_url ?? pageImage;
       console.log(`[fetch] Fetched content (${content.length} chars, image: ${!!image_url}): "${article.title?.slice(0, 60)}"`);
-      const result = await summarizeArticle(article.title, content);
+      const result = await summarizeArticle(article.title, content, source.user_id);
       insertArticle({
         source_id: source.id,
         url: article.url,
