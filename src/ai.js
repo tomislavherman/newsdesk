@@ -42,7 +42,7 @@ Return only valid JSON, no explanation.`;
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: 512,
+    max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -74,7 +74,7 @@ Return only valid JSON, no explanation.`;
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: 512,
+    max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
   });
 

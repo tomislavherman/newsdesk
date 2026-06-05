@@ -40,7 +40,7 @@ db.exec(`
     date_selector TEXT,
     image_selector TEXT,
     fetch_type TEXT CHECK(fetch_type IN ('rss', 'html')) NOT NULL DEFAULT 'html',
-    max_age_days INTEGER DEFAULT 7,
+    max_age_days INTEGER DEFAULT 1,
     color TEXT,
     active INTEGER DEFAULT 1,
     analysis_notes TEXT,
@@ -77,8 +77,33 @@ if (!sourceCols.includes('user_id'))       db.exec('ALTER TABLE sources ADD COLU
 if (!sourceCols.includes('date_selector')) db.exec('ALTER TABLE sources ADD COLUMN date_selector TEXT');
 if (!sourceCols.includes('image_selector'))db.exec('ALTER TABLE sources ADD COLUMN image_selector TEXT');
 if (!sourceCols.includes('analysis_notes'))db.exec('ALTER TABLE sources ADD COLUMN analysis_notes TEXT');
-if (!sourceCols.includes('max_age_days'))  db.exec('ALTER TABLE sources ADD COLUMN max_age_days INTEGER DEFAULT 7');
+if (!sourceCols.includes('max_age_days'))  db.exec('ALTER TABLE sources ADD COLUMN max_age_days INTEGER DEFAULT 1');
 if (!sourceCols.includes('color'))         db.exec('ALTER TABLE sources ADD COLUMN color TEXT');
+
+// If sources table still has old single-column url unique constraint, rebuild it
+const sourceIndexes = db.prepare("PRAGMA index_list(sources)").all();
+const hasOldUrlUnique = sourceIndexes.some(idx => {
+  if (!idx.unique) return false;
+  const cols = db.prepare(`PRAGMA index_info(${idx.name})`).all().map(c => c.name);
+  return cols.length === 1 && cols[0] === 'url';
+});
+if (hasOldUrlUnique) {
+  db.exec(`
+    CREATE TABLE sources_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      url TEXT NOT NULL,
+      name TEXT, feed_url TEXT, selector TEXT, date_selector TEXT, image_selector TEXT,
+      fetch_type TEXT CHECK(fetch_type IN ('rss', 'html')) NOT NULL DEFAULT 'html',
+      max_age_days INTEGER DEFAULT 1, color TEXT, active INTEGER DEFAULT 1,
+      analysis_notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id, url)
+    );
+    INSERT INTO sources_new SELECT id, user_id, url, name, feed_url, selector, date_selector, image_selector, fetch_type, max_age_days, color, active, analysis_notes, created_at FROM sources;
+    DROP TABLE sources;
+    ALTER TABLE sources_new RENAME TO sources;
+  `);
+}
 
 const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
 if (!userCols.includes('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0');
@@ -86,6 +111,14 @@ if (!userCols.includes('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked
 const articleCols = db.prepare("PRAGMA table_info(articles)").all().map(c => c.name);
 if (!articleCols.includes('analysis_notes'))db.exec('ALTER TABLE articles ADD COLUMN analysis_notes TEXT');
 if (!articleCols.includes('image_url'))    db.exec('ALTER TABLE articles ADD COLUMN image_url TEXT');
+
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_sources_user_id          ON sources(user_id);
+  CREATE INDEX IF NOT EXISTS idx_articles_source_id       ON articles(source_id);
+  CREATE INDEX IF NOT EXISTS idx_articles_url             ON articles(url);
+  CREATE INDEX IF NOT EXISTS idx_articles_source_relevance ON articles(source_id, is_relevant, seen);
+  CREATE INDEX IF NOT EXISTS idx_feedback_article_id      ON feedback(article_id);
+`);
 
 // ── Users ─────────────────────────────────────────────────────────────────
 

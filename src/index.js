@@ -192,7 +192,7 @@ fastify.post('/api/sources', async (req) => {
     user_id: req.user.id, url, name,
     feed_url: feed_url ?? null, selector: selector ?? null,
     date_selector: date_selector ?? null, image_selector: image_selector ?? null,
-    fetch_type, max_age_days: max_age_days ?? 7,
+    fetch_type, max_age_days: max_age_days ?? 1,
     color: color ?? null, analysis_notes: analysis_notes ?? null,
   });
   const id = result.lastInsertRowid;
@@ -211,7 +211,7 @@ fastify.patch('/api/sources/:id', async (req) => {
   if (active !== undefined) {
     updateSourceActive(id, active);
   } else {
-    updateSource(id, { name, feed_url: feed_url ?? null, selector: selector ?? null, date_selector: date_selector ?? null, image_selector: image_selector ?? null, fetch_type, max_age_days: max_age_days ?? 7, color: color ?? null });
+    updateSource(id, { name, feed_url: feed_url ?? null, selector: selector ?? null, date_selector: date_selector ?? null, image_selector: image_selector ?? null, fetch_type, max_age_days: max_age_days ?? 1, color: color ?? null });
   }
   return { ok: true };
 });
