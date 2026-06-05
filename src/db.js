@@ -15,6 +15,7 @@ db.exec(`
     password_hash TEXT NOT NULL,
     role TEXT CHECK(role IN ('admin', 'user')) DEFAULT 'user',
     approved INTEGER DEFAULT 0,
+    blocked INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -79,6 +80,9 @@ if (!sourceCols.includes('analysis_notes'))db.exec('ALTER TABLE sources ADD COLU
 if (!sourceCols.includes('max_age_days'))  db.exec('ALTER TABLE sources ADD COLUMN max_age_days INTEGER DEFAULT 7');
 if (!sourceCols.includes('color'))         db.exec('ALTER TABLE sources ADD COLUMN color TEXT');
 
+const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+if (!userCols.includes('blocked')) db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0');
+
 const articleCols = db.prepare("PRAGMA table_info(articles)").all().map(c => c.name);
 if (!articleCols.includes('analysis_notes'))db.exec('ALTER TABLE articles ADD COLUMN analysis_notes TEXT');
 if (!articleCols.includes('image_url'))    db.exec('ALTER TABLE articles ADD COLUMN image_url TEXT');
@@ -104,11 +108,12 @@ export function createUser({ username, password_hash, role, approved }) {
 }
 
 export function getUsers() {
-  return db.prepare('SELECT id, username, role, approved, created_at FROM users ORDER BY created_at').all();
+  return db.prepare('SELECT id, username, role, approved, blocked, created_at FROM users ORDER BY created_at').all();
 }
 
-export function updateUser(id, { role, approved }) {
-  return db.prepare('UPDATE users SET role = ?, approved = ? WHERE id = ?').run(role, approved ? 1 : 0, id);
+export function updateUser(id, { role, approved, blocked }) {
+  return db.prepare('UPDATE users SET role = ?, approved = ?, blocked = ? WHERE id = ?')
+    .run(role, approved ? 1 : 0, blocked ? 1 : 0, id);
 }
 
 // Assign orphaned sources (from before auth) to the first admin

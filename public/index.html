@@ -566,7 +566,6 @@
       <button data-view="admin" id="admin-nav-btn" style="display:none">Admin</button>
     </nav>
     <div class="header-actions">
-      <button class="btn" id="fetch-btn" style="display:none">Fetch now</button>
     </div>
     <div class="header-user" id="header-user" style="display:none">
       <span id="header-username"></span>
@@ -612,6 +611,7 @@
       <div class="admin-section">
         <h3>Data</h3>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn" id="fetch-btn">Fetch now</button>
           <button class="btn" id="wipe-articles-btn" style="color:var(--accent)">Wipe articles</button>
           <button class="btn" id="wipe-sources-btn" style="color:var(--accent)">Wipe sources</button>
         </div>
@@ -652,6 +652,12 @@
       <div id="auth-pending-form" style="display:none">
         <h2>Awaiting approval</h2>
         <p style="font-size:0.9rem;color:var(--muted);margin-bottom:1rem">Your account is pending admin approval. You will be able to sign in once approved.</p>
+        <button class="btn" style="width:100%" onclick="doLogout()">Sign out</button>
+      </div>
+
+      <div id="auth-blocked-form" style="display:none">
+        <h2>Account blocked</h2>
+        <p style="font-size:0.9rem;color:var(--muted);margin-bottom:1rem">Your account has been blocked. Contact the admin if you think this is a mistake.</p>
         <button class="btn" style="width:100%" onclick="doLogout()">Sign out</button>
       </div>
     </div>
@@ -817,10 +823,6 @@
         btn.classList.add('active');
         document.getElementById(`view-${btn.dataset.view}`).classList.add('active');
         const view = btn.dataset.view;
-        const onArticles = view === 'articles';
-        if (currentUser?.role === 'admin') {
-          document.getElementById('fetch-btn').style.display = onArticles ? '' : 'none';
-        }
         if (view === 'sources') loadSources();
         if (view === 'admin') loadAdminPanel();
       });
@@ -1099,8 +1101,6 @@
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       document.querySelector('nav button[data-view="articles"]').classList.add('active');
       document.getElementById('view-articles').classList.add('active');
-      const isAdmin = currentUser?.role === 'admin';
-      document.getElementById('fetch-btn').style.display = isAdmin ? '' : 'none';
 
       const btn = document.getElementById('fetch-btn');
       btn.textContent = 'Fetching…';
@@ -1470,7 +1470,7 @@
     let currentUser = null;
 
     function showAuthForm(which) {
-      ['login', 'signup', 'pending'].forEach(f => {
+      ['login', 'signup', 'pending', 'blocked'].forEach(f => {
         document.getElementById('auth-' + f + '-form').style.display = f === which ? '' : 'none';
       });
     }
@@ -1490,7 +1490,6 @@
       document.getElementById('header-user').style.display = 'flex';
       if (user.role === 'admin') {
         document.getElementById('admin-nav-btn').style.display = '';
-        document.getElementById('fetch-btn').style.display = '';
       }
     }
 
@@ -1499,6 +1498,7 @@
         const res = await fetch('/api/auth/me');
         const { user } = await res.json();
         if (!user) { showAuthOverlay('login'); return; }
+        if (user.blocked) { showAuthOverlay('blocked'); return; }
         if (!user.approved) { showAuthOverlay('pending'); return; }
         applyUserRole(user);
         hideAuthOverlay();
@@ -1519,7 +1519,11 @@
           body: JSON.stringify({ username, password }),
         });
         const data = await res.json();
-        if (!res.ok) { err.textContent = data.error; return; }
+        if (!res.ok) {
+          if (data.error === 'Account has been blocked') { showAuthForm('blocked'); return; }
+          err.textContent = data.error;
+          return;
+        }
         applyUserRole(data.user);
         hideAuthOverlay();
         loadArticles();
@@ -1562,7 +1566,6 @@
       currentUser = null;
       document.getElementById('header-user').style.display = 'none';
       document.getElementById('admin-nav-btn').style.display = 'none';
-      document.getElementById('fetch-btn').style.display = 'none';
       showAuthOverlay('login');
     }
 
@@ -1583,25 +1586,24 @@
         const res = await fetch('/api/admin/users');
         const users = await res.json();
         const tbody = document.getElementById('users-tbody');
-        tbody.innerHTML = users.map(u => [
-          '<tr>',
-            '<td>' + escHtml(u.username) + '</td>',
-            '<td>',
-              u.id === currentUser.id
-                ? '<span style="color:var(--muted)">' + u.role + '</span>'
-                : '<select onchange="updateUserRole(' + u.id + ', this.value, ' + u.approved + ')">'
-                  + '<option value="user"' + (u.role === 'user' ? ' selected' : '') + '>user</option>'
-                  + '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option>'
-                  + '</select>',
-            '</td>',
-            '<td>',
-              u.approved
-                ? '<span style="color:var(--muted)">approved</span>'
-                : '<button class="btn" onclick="approveUser(' + u.id + ', \'' + escHtml(u.role) + '\')">Approve</button>',
-            '</td>',
-            '<td></td>',
-          '</tr>',
-        ].join('')).join('');
+        tbody.innerHTML = users.map(u => {
+          const isSelf = u.id === currentUser.id;
+          const status = u.blocked ? 'blocked' : u.approved ? 'approved' : 'pending';
+          const statusEl = '<span style="color:var(--muted)">' + status + '</span>';
+          const roleEl = isSelf
+            ? '<span style="color:var(--muted)">' + u.role + '</span>'
+            : '<select onchange="updateUserRole(' + u.id + ', this.value)">'
+                + '<option value="user"' + (u.role === 'user' ? ' selected' : '') + '>user</option>'
+                + '<option value="admin"' + (u.role === 'admin' ? ' selected' : '') + '>admin</option>'
+                + '</select>';
+          let actions = '';
+          if (!isSelf) {
+            if (!u.approved && !u.blocked) actions += '<button class="btn" onclick="approveUser(' + u.id + ')">Approve</button> ';
+            if (!u.blocked) actions += '<button class="btn" style="color:var(--accent)" onclick="blockUser(' + u.id + ')">Block</button>';
+            if (u.blocked)  actions += '<button class="btn" onclick="unblockUser(' + u.id + ')">Unblock</button>';
+          }
+          return '<tr><td>' + escHtml(u.username) + '</td><td>' + roleEl + '</td><td>' + statusEl + '</td><td>' + actions + '</td></tr>';
+        }).join('');
       } catch {}
     }
 
@@ -1612,18 +1614,34 @@
       });
     });
 
-    async function approveUser(id, role) {
+    async function approveUser(id) {
       await fetch('/api/admin/users/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved: true, role }),
+        body: JSON.stringify({ approved: true, blocked: false }),
       });
       loadAdminPanel();
     }
 
-    async function updateUserRole(id, role, approved) {
+    async function blockUser(id) {
       await fetch('/api/admin/users/' + id, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, approved }),
+        body: JSON.stringify({ blocked: true }),
+      });
+      loadAdminPanel();
+    }
+
+    async function unblockUser(id) {
+      await fetch('/api/admin/users/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocked: false, approved: true }),
+      });
+      loadAdminPanel();
+    }
+
+    async function updateUserRole(id, role) {
+      await fetch('/api/admin/users/' + id, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
       });
     }
 

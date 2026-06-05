@@ -32,7 +32,7 @@ fastify.addHook('preHandler', async (req, reply) => {
 
   const token = req.cookies?.session;
   const user = token ? getUserByToken(token) : null;
-  if (!user || !user.approved) return reply.code(401).send({ error: 'Unauthorized' });
+  if (!user || !user.approved || user.blocked) return reply.code(401).send({ error: 'Unauthorized' });
 
   req.user = user;
 
@@ -90,6 +90,7 @@ fastify.post('/api/auth/login', async (req, reply) => {
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     return reply.code(401).send({ error: 'Invalid username or password' });
   }
+  if (user.blocked) return reply.code(403).send({ error: 'Account has been blocked' });
   if (!user.approved) return reply.code(403).send({ error: 'Account pending approval' });
 
   const token = generateToken();
@@ -113,10 +114,14 @@ fastify.get('/api/admin/users', async () => getUsers());
 fastify.patch('/api/admin/users/:id', async (req, reply) => {
   const id = Number(req.params.id);
   if (id === req.user.id) return reply.code(400).send({ error: 'Cannot modify your own role' });
-  const { role, approved } = req.body;
+  const { role, approved, blocked } = req.body;
   const target = getUserById(id);
   if (!target) return reply.code(404).send({ error: 'User not found' });
-  updateUser(id, { role: role ?? target.role, approved: approved !== undefined ? approved : target.approved });
+  updateUser(id, {
+    role: role ?? target.role,
+    approved: approved !== undefined ? approved : target.approved,
+    blocked: blocked !== undefined ? blocked : target.blocked,
+  });
   return { ok: true };
 });
 
