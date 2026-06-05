@@ -566,9 +566,6 @@
       <button data-view="admin" id="admin-nav-btn" style="display:none">Admin</button>
     </nav>
     <div class="header-actions">
-      <button class="btn" id="mark-all-seen-btn">Mark all seen</button>
-      <button class="btn" id="wipe-articles-btn" style="color:var(--accent);display:none">Wipe articles</button>
-      <button class="btn" id="wipe-sources-btn" style="color:var(--accent);display:none">Wipe sources</button>
       <button class="btn" id="fetch-btn" style="display:none">Fetch now</button>
     </div>
     <div class="header-user" id="header-user" style="display:none">
@@ -611,6 +608,13 @@
         <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer">
           <input type="checkbox" id="auto-approve-toggle"> Auto-approve new users
         </label>
+      </div>
+      <div class="admin-section">
+        <h3>Data</h3>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn" id="wipe-articles-btn" style="color:var(--accent)">Wipe articles</button>
+          <button class="btn" id="wipe-sources-btn" style="color:var(--accent)">Wipe sources</button>
+        </div>
       </div>
       <div class="admin-section">
         <h3>Users</h3>
@@ -813,17 +817,12 @@
         btn.classList.add('active');
         document.getElementById(`view-${btn.dataset.view}`).classList.add('active');
         const view = btn.dataset.view;
-        const onSources = view === 'sources';
-        const onAdmin = view === 'admin';
         const onArticles = view === 'articles';
         if (currentUser?.role === 'admin') {
-          document.getElementById('wipe-articles-btn').style.display = onArticles ? '' : 'none';
-          document.getElementById('wipe-sources-btn').style.display = onSources ? '' : 'none';
           document.getElementById('fetch-btn').style.display = onArticles ? '' : 'none';
         }
-        document.getElementById('mark-all-seen-btn').style.display = onArticles ? '' : 'none';
-        if (onSources) loadSources();
-        if (onAdmin) loadAdminPanel();
+        if (view === 'sources') loadSources();
+        if (view === 'admin') loadAdminPanel();
       });
     });
 
@@ -955,7 +954,6 @@
         activeArticleTab = btn.dataset.tab;
         currentPage = 0;
         document.getElementById('all-filters').style.display = activeArticleTab === 'all' ? 'flex' : 'none';
-        document.getElementById('mark-all-seen-btn').style.display = activeArticleTab === 'unread' ? '' : 'none';
         loadArticles();
       });
     });
@@ -1038,12 +1036,6 @@
       updateBadge();
     }
 
-    document.getElementById('mark-all-seen-btn').addEventListener('click', async () => {
-      await fetch('/api/articles/seen-all', { method: 'POST' });
-      loadArticles();
-      updateBadge();
-    });
-
     document.getElementById('wipe-articles-btn').addEventListener('click', async () => {
       if (!confirm('Delete all articles? This cannot be undone.')) return;
       await fetch('/api/articles', { method: 'DELETE' });
@@ -1108,9 +1100,6 @@
       document.querySelector('nav button[data-view="articles"]').classList.add('active');
       document.getElementById('view-articles').classList.add('active');
       const isAdmin = currentUser?.role === 'admin';
-      document.getElementById('wipe-articles-btn').style.display = isAdmin ? '' : 'none';
-      document.getElementById('wipe-sources-btn').style.display = 'none';
-      document.getElementById('mark-all-seen-btn').style.display = '';
       document.getElementById('fetch-btn').style.display = isAdmin ? '' : 'none';
 
       const btn = document.getElementById('fetch-btn');
@@ -1501,7 +1490,6 @@
       document.getElementById('header-user').style.display = 'flex';
       if (user.role === 'admin') {
         document.getElementById('admin-nav-btn').style.display = '';
-        document.getElementById('wipe-articles-btn').style.display = '';
         document.getElementById('fetch-btn').style.display = '';
       }
     }
@@ -1574,7 +1562,6 @@
       currentUser = null;
       document.getElementById('header-user').style.display = 'none';
       document.getElementById('admin-nav-btn').style.display = 'none';
-      document.getElementById('wipe-articles-btn').style.display = 'none';
       document.getElementById('fetch-btn').style.display = 'none';
       showAuthOverlay('login');
     }
