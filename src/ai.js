@@ -4,6 +4,7 @@ import { getRecentFeedback } from './db.js';
 
 const client = new PostHogAnthropic({ posthog });
 const MODEL = 'claude-haiku-4-5-20251001';
+const CACHE_MIN_TOKENS = 1024;
 
 function parseJson(text) {
   try {
@@ -13,6 +14,25 @@ function parseJson(text) {
     if (match) return JSON.parse(match[0]);
     throw new Error('No JSON found in response');
   }
+}
+
+function estimateTokens(text) {
+  return Math.floor(text.length / 4);
+}
+
+function buildClassifyPrefix(userId) {
+  const recentFeedback = userId ? getRecentFeedback(userId, 50) : [];
+
+  const feedbackSection = recentFeedback.length > 0
+    ? `\nThe user has previously dismissed these articles as not interesting:\n${recentFeedback.map(f => `- "${f.title}"${f.reason ? ` (reason: ${f.reason})` : ''}`).join('\n')}\n\nBased only on these dismissals, set is_relevant to false if this article clearly matches the same pattern. If there is no clear match, default to true.`
+    : '';
+
+  return `Summarize this article and assess relevance. Return a JSON object with:
+- summary (string): 2-3 neutral factual sentences summarizing the article
+- is_relevant (boolean): true by default; false only if the article clearly matches patterns from the user's dismissed articles below${feedbackSection ? '' : ' (no dismissals yet — always true)'}
+- reason (string|null): if is_relevant is false, a single sentence explaining why this article matches the user's dismissed patterns. null if is_relevant is true.
+${feedbackSection}
+Return only valid JSON, no explanation.`;
 }
 
 // Called only after RSS validation has already failed — does HTML selector detection via Claude.
@@ -58,26 +78,26 @@ Return only valid JSON, no explanation.`;
 }
 
 export async function summarizeArticle(title, content, userId = null) {
-  const recentFeedback = userId ? getRecentFeedback(userId, 50) : [];
+  const prefix = buildClassifyPrefix(userId);
+  const shouldCache = estimateTokens(prefix) >= CACHE_MIN_TOKENS;
 
-  const feedbackSection = recentFeedback.length > 0
-    ? `\nThe user has previously dismissed these articles as not interesting:\n${recentFeedback.map(f => `- "${f.title}"${f.reason ? ` (reason: ${f.reason})` : ''}`).join('\n')}\n\nBased only on these dismissals, set is_relevant to false if this article clearly matches the same pattern. If there is no clear match, default to true.`
-    : '';
-
-  const prompt = `Summarize this article and assess relevance. Return a JSON object with:
-- summary (string): 2-3 neutral factual sentences summarizing the article
-- is_relevant (boolean): true by default; false only if the article clearly matches patterns from the user's dismissed articles below${feedbackSection ? '' : ' (no dismissals yet — always true)'}
-- reason (string|null): if is_relevant is false, a single sentence explaining why this article matches the user's dismissed patterns. null if is_relevant is true.
-${feedbackSection}
-Article title: ${title}
-Article content: ${content?.slice(0, 3000) ?? '(no content)'}
-
-Return only valid JSON, no explanation.`;
+  const articlePart = `Article title: ${title}
+Article content: ${content?.slice(0, 3000) ?? '(no content)'}`;
 
   const message = await client.messages.create({
     model: MODEL,
     max_tokens: 1024,
-    messages: [{ role: 'user', content: prompt }],
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: prefix,
+          ...(shouldCache ? { cache_control: { type: 'ephemeral', ttl: 3600 } } : {}),
+        },
+        { type: 'text', text: articlePart },
+      ],
+    }],
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
@@ -86,6 +106,28 @@ Return only valid JSON, no explanation.`;
 
   return {
     ...parsed,
-    _log: { model: MODEL, prompt, raw_response: rawResponse, parsed },
+    _log: { model: MODEL, prefix, article_part: articlePart, raw_response: rawResponse, parsed },
   };
+}
+
+export async function warmClassifyCache(userId) {
+  const prefix = buildClassifyPrefix(userId);
+  if (estimateTokens(prefix) < CACHE_MIN_TOKENS) return;
+
+  await client.messages.create({
+    model: MODEL,
+    max_tokens: 1,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: prefix,
+          cache_control: { type: 'ephemeral', ttl: 3600 },
+        },
+        { type: 'text', text: 'ping' },
+      ],
+    }],
+    ...(userId ? { posthogDistinctId: String(userId) } : {}),
+  });
 }

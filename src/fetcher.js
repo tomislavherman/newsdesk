@@ -2,7 +2,7 @@ import { fetch } from 'undici';
 import * as cheerio from 'cheerio';
 import RSSParser from 'rss-parser';
 import { getActiveSources, getSourceById, articleExistsByUrl, insertArticle } from './db.js';
-import { analyzeSource, summarizeArticle } from './ai.js';
+import { analyzeSource, summarizeArticle, warmClassifyCache } from './ai.js';
 
 const rssParser = new RSSParser({
   customFields: {
@@ -292,15 +292,31 @@ async function processSource(source) {
 
 export async function fetchAllSources() {
   const sources = getActiveSources();
+  const newByUser = {};
   let totalNew = 0;
+
   for (const source of sources) {
+    const uid = source.user_id;
+    if (uid != null && !(uid in newByUser)) newByUser[uid] = 0;
     try {
       console.log(`[fetch] Processing source: ${source.name ?? source.url}`);
-      totalNew += await processSource(source);
+      const count = await processSource(source);
+      totalNew += count;
+      if (uid != null) newByUser[uid] += count;
     } catch (err) {
       console.error(`[fetch] Failed to fetch source ${source.name ?? source.url}:`, err.message);
     }
   }
+
+  // Keep classification cache alive for users who had no new articles this cycle
+  for (const [uid, count] of Object.entries(newByUser)) {
+    if (count === 0) {
+      warmClassifyCache(Number(uid)).catch(err =>
+        console.error(`[fetch] Cache warmup failed for user ${uid}:`, err.message)
+      );
+    }
+  }
+
   console.log(`[fetch] Cycle complete. ${totalNew} new articles.`);
   return { totalNew };
 }
