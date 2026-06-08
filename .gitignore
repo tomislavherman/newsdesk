@@ -3,3 +3,5 @@ node_modules/
 news.db
 *.db-shm
 *.db-wal
+posthog-setup-report.md
+.claude/settings.local.json
