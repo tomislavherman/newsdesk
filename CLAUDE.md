@@ -253,6 +253,8 @@ Single HTML file, vanilla JS, no build step, no framework.
 
 ```
 ANTHROPIC_API_KEY=   # Required
+POSTHOG_API_KEY=     # Optional. Enables analytics and LLM observability
+POSTHOG_HOST=        # Optional. Defaults to https://us.i.posthog.com
 PORT=3000            # Optional, defaults to 3000
 HOST=127.0.0.1       # Optional, defaults to 127.0.0.1
 ```

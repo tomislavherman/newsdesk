@@ -35,5 +35,7 @@ Configure Tailscale Serve to proxy port 3000.
 | Variable | Default | Description |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | required | Anthropic API key |
+| `POSTHOG_API_KEY` | optional | Enables analytics and LLM observability |
+| `POSTHOG_HOST` | `https://us.i.posthog.com` | PostHog ingestion host (use EU endpoint if on EU cloud) |
 | `PORT` | `3000` | Server port |
 | `HOST` | `127.0.0.1` | Bind address |
