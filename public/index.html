@@ -675,26 +675,61 @@
       <div id="sources-list"></div>
     </div>
     <div class="view" id="view-admin">
-      <div class="admin-section">
-        <h3>Settings</h3>
-        <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer">
-          <input type="checkbox" id="auto-approve-toggle"> Auto-approve new users
-        </label>
+      <div class="sub-tabs" style="margin-bottom:1.25rem">
+        <button class="sub-tab active" data-admin-tab="management">Management</button>
+        <button class="sub-tab" data-admin-tab="database">Database</button>
       </div>
-      <div class="admin-section">
-        <h3>Data</h3>
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-          <button class="btn" id="fetch-btn">Fetch now</button>
-          <button class="btn" id="wipe-articles-btn" style="color:var(--accent)">Wipe articles</button>
-          <button class="btn" id="wipe-sources-btn" style="color:var(--accent)">Wipe sources</button>
+      <div id="admin-tab-management">
+        <div class="admin-section">
+          <h3>Settings</h3>
+          <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.9rem;cursor:pointer">
+            <input type="checkbox" id="auto-approve-toggle"> Auto-approve new users
+          </label>
+        </div>
+        <div class="admin-section">
+          <h3>Data</h3>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <button class="btn" id="fetch-btn">Fetch now</button>
+            <button class="btn" id="wipe-articles-btn" style="color:var(--accent)">Wipe articles</button>
+            <button class="btn" id="wipe-sources-btn" style="color:var(--accent)">Wipe sources</button>
+          </div>
+        </div>
+        <div class="admin-section">
+          <h3>Users</h3>
+          <table class="users-table">
+            <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
         </div>
       </div>
-      <div class="admin-section">
-        <h3>Users</h3>
-        <table class="users-table">
-          <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
-          <tbody id="users-tbody"></tbody>
-        </table>
+      <div id="admin-tab-database" style="display:none">
+        <div class="admin-section">
+          <h3>Users <span id="db-users-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:0.8rem"></span></h3>
+          <div style="overflow-x:auto">
+            <table class="users-table" id="db-users-table">
+              <thead><tr><th>ID</th><th>Username</th><th>Role</th><th>Status</th><th>Created</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="admin-section">
+          <h3>Sources <span id="db-sources-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:0.8rem"></span></h3>
+          <div style="overflow-x:auto">
+            <table class="users-table" id="db-sources-table">
+              <thead><tr><th>ID</th><th>User</th><th>Name</th><th>URL</th><th>Type</th><th>Active</th><th>Created</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="admin-section">
+          <h3>Articles <span id="db-articles-count" style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:0.8rem"></span></h3>
+          <div style="overflow-x:auto">
+            <table class="users-table" id="db-articles-table">
+              <thead><tr><th>ID</th><th>User</th><th>Source</th><th>Title</th><th>Relevant</th><th>Seen</th><th>Fetched</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
     <div class="view" id="view-about">
@@ -1680,6 +1715,48 @@
     document.getElementById('logout-btn').addEventListener('click', doLogout);
 
     // ── Admin panel ────────────────────────────────────────────────────────
+
+    document.querySelectorAll('[data-admin-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-admin-tab]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.adminTab;
+        document.getElementById('admin-tab-management').style.display = tab === 'management' ? '' : 'none';
+        document.getElementById('admin-tab-database').style.display = tab === 'database' ? '' : 'none';
+        if (tab === 'database') loadAdminDatabase();
+      });
+    });
+
+    async function loadAdminDatabase() {
+      try {
+        const [usersRes, sourcesRes, articlesRes] = await Promise.all([
+          fetch('/api/admin/users'),
+          fetch('/api/admin/sources'),
+          fetch('/api/admin/articles'),
+        ]);
+        const [users, sources, articles] = await Promise.all([usersRes.json(), sourcesRes.json(), articlesRes.json()]);
+
+        document.getElementById('db-users-count').textContent = '(' + users.length + ')';
+        document.querySelector('#db-users-table tbody').innerHTML = users.map(u => {
+          const status = u.blocked ? 'blocked' : u.approved ? 'approved' : 'pending';
+          return '<tr><td>' + u.id + '</td><td>' + escHtml(u.username) + '</td><td>' + escHtml(u.role) + '</td><td>' + status + '</td><td>' + formatDate(u.created_at) + '</td></tr>';
+        }).join('');
+
+        document.getElementById('db-sources-count').textContent = '(' + sources.length + ')';
+        document.querySelector('#db-sources-table tbody').innerHTML = sources.map(s =>
+          '<tr><td>' + s.id + '</td><td>' + escHtml(s.username ?? '—') + '</td><td>' + escHtml(s.name ?? '—') + '</td>' +
+          '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + escHtml(s.url) + '" target="_blank" rel="noopener">' + escHtml(s.url) + '</a></td>' +
+          '<td>' + escHtml(s.fetch_type) + '</td><td>' + (s.active ? 'yes' : 'no') + '</td><td>' + formatDate(s.created_at) + '</td></tr>'
+        ).join('');
+
+        document.getElementById('db-articles-count').textContent = '(' + articles.length + (articles.length === 100 ? ', showing latest 100' : '') + ')';
+        document.querySelector('#db-articles-table tbody').innerHTML = articles.map(a =>
+          '<tr><td>' + a.id + '</td><td>' + escHtml(a.username ?? '—') + '</td><td>' + escHtml(a.source_name ?? '—') + '</td>' +
+          '<td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><a href="' + escHtml(a.url) + '" target="_blank" rel="noopener">' + escHtml(a.title ?? a.url) + '</a></td>' +
+          '<td>' + (a.is_relevant ? 'yes' : 'no') + '</td><td>' + (a.seen ? 'yes' : 'no') + '</td><td>' + formatDate(a.fetched_at) + '</td></tr>'
+        ).join('');
+      } catch {}
+    }
 
     async function loadAdminPanel() {
       // Settings

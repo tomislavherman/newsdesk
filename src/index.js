@@ -7,6 +7,7 @@ import {
   createSession, getUserByToken, deleteSession,
   getSetting, setSetting,
   getSources, insertSource, updateSourceActive, updateSource, deleteSource, deleteAllSources, getSourceById,
+  getAllSourcesAdmin, getAllArticlesAdmin,
   getArticles, getUnseenCount, markArticleSeen, markArticleUnseen, markAllSeen,
   dismissArticle, restoreArticle, deleteAllArticles, insertFeedback,
 } from './db.js';
@@ -133,6 +134,13 @@ fastify.patch('/api/admin/users/:id', async (req, reply) => {
     blocked: blocked !== undefined ? blocked : target.blocked,
   });
   return { ok: true };
+});
+
+fastify.get('/api/admin/sources', async () => getAllSourcesAdmin());
+
+fastify.get('/api/admin/articles', async (req) => {
+  const limit = Math.min(Number(req.query.limit ?? 100), 500);
+  return getAllArticlesAdmin(limit);
 });
 
 fastify.get('/api/admin/settings', async () => ({

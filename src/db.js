@@ -356,3 +356,26 @@ export function getRecentFeedback(userId, limit = 20) {
     LIMIT ?
   `).all(userId, limit);
 }
+
+// ── Admin resource views ───────────────────────────────────────────────────
+
+export function getAllSourcesAdmin() {
+  return db.prepare(`
+    SELECT s.id, s.url, s.name, s.fetch_type, s.active, s.created_at, u.username
+    FROM sources s
+    LEFT JOIN users u ON s.user_id = u.id
+    ORDER BY s.created_at DESC
+  `).all();
+}
+
+export function getAllArticlesAdmin(limit = 100) {
+  return db.prepare(`
+    SELECT a.id, a.url, a.title, a.fetched_at, a.is_relevant, a.seen,
+           s.name AS source_name, u.username
+    FROM articles a
+    JOIN sources s ON a.source_id = s.id
+    LEFT JOIN users u ON s.user_id = u.id
+    ORDER BY a.fetched_at DESC
+    LIMIT ?
+  `).all(limit);
+}
