@@ -12,6 +12,7 @@ import {
 } from './db.js';
 import { hashPassword, verifyPassword, generateToken } from './auth.js';
 import { fetchAllSources, fetchSource, detectSourceConfig } from './fetcher.js';
+import posthog from './posthog.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fastify = Fastify({ logger: true });
@@ -70,7 +71,14 @@ fastify.post('/api/auth/signup', async (req, reply) => {
 
   if (isFirst) claimOrphanedSources(userId);
 
+  posthog.capture({
+    distinctId: String(userId),
+    event: 'user signed up',
+    properties: { role, approved, is_first_user: isFirst },
+  });
+
   if (approved) {
+    posthog.identify({ distinctId: String(userId), properties: { username, role } });
     const token = generateToken();
     createSession(token, userId);
     reply.setCookie('session', token, { httpOnly: true, sameSite: 'strict', path: '/', maxAge: 30 * 24 * 3600 });
@@ -93,6 +101,8 @@ fastify.post('/api/auth/login', async (req, reply) => {
   if (user.blocked) return reply.code(403).send({ error: 'Account has been blocked' });
   if (!user.approved) return reply.code(403).send({ error: 'Account pending approval' });
 
+  posthog.identify({ distinctId: String(user.id), properties: { username: user.username, role: user.role } });
+  posthog.capture({ distinctId: String(user.id), event: 'user logged in' });
   const token = generateToken();
   createSession(token, user.id);
   reply.setCookie('session', token, { httpOnly: true, sameSite: 'strict', path: '/', maxAge: 30 * 24 * 3600 });
@@ -163,6 +173,11 @@ fastify.post('/api/articles/:id/feedback', async (req) => {
   const id = Number(req.params.id);
   dismissArticle(id, req.user.id);
   insertFeedback(id, req.body?.reason);
+  posthog.capture({
+    distinctId: String(req.user.id),
+    event: 'article dismissed',
+    properties: { article_id: id, has_reason: !!req.body?.reason },
+  });
   return { ok: true };
 });
 
@@ -173,6 +188,7 @@ fastify.post('/api/articles/:id/restore', async (req) => {
 
 fastify.delete('/api/articles', async (req) => {
   deleteAllArticles(req.user.id);
+  posthog.capture({ distinctId: String(req.user.id), event: 'articles wiped' });
   return { ok: true };
 });
 
@@ -183,7 +199,7 @@ fastify.get('/api/sources', async (req) => getSources(req.user.id));
 fastify.post('/api/sources/analyze', async (req, reply) => {
   const { url } = req.body;
   if (!url) return reply.code(400).send({ error: 'url is required' });
-  return detectSourceConfig(url);
+  return detectSourceConfig(url, req.user.id);
 });
 
 fastify.post('/api/sources', async (req, reply) => {
@@ -198,6 +214,11 @@ fastify.post('/api/sources', async (req, reply) => {
     });
     const id = result.lastInsertRowid;
     fetchSource(id).catch(err => fastify.log.error(err));
+    posthog.capture({
+      distinctId: String(req.user.id),
+      event: 'source added',
+      properties: { source_name: name, fetch_type, has_feed_url: !!feed_url },
+    });
     return { id };
   } catch (err) {
     if (err.code === 'SQLITE_CONSTRAINT_UNIQUE') {
@@ -217,6 +238,7 @@ fastify.patch('/api/sources/:id', async (req) => {
   const { active, name, feed_url, selector, date_selector, image_selector, fetch_type, max_age_days, color } = req.body;
   if (active !== undefined) {
     updateSourceActive(id, req.user.id, active);
+    posthog.capture({ distinctId: String(req.user.id), event: 'source toggled', properties: { source_id: id, active } });
   } else {
     updateSource(id, req.user.id, { name, feed_url: feed_url ?? null, selector: selector ?? null, date_selector: date_selector ?? null, image_selector: image_selector ?? null, fetch_type, max_age_days: max_age_days ?? 1, color: color ?? null });
   }
@@ -224,7 +246,9 @@ fastify.patch('/api/sources/:id', async (req) => {
 });
 
 fastify.delete('/api/sources/:id', async (req) => {
-  deleteSource(Number(req.params.id), req.user.id);
+  const sourceId = Number(req.params.id);
+  deleteSource(sourceId, req.user.id);
+  posthog.capture({ distinctId: String(req.user.id), event: 'source deleted', properties: { source_id: sourceId } });
   return { ok: true };
 });
 
@@ -238,8 +262,20 @@ fastify.delete('/api/sources', async (req) => {
 fastify.post('/api/fetch', async (req, reply) => {
   if (req.user.role !== 'admin') return reply.code(403).send({ error: 'Forbidden' });
   fetchAllSources().catch(err => fastify.log.error(err));
+  posthog.capture({ distinctId: String(req.user.id), event: 'fetch triggered' });
   return { ok: true };
 });
+
+// ── Error handling ────────────────────────────────────────────────────────
+
+fastify.setErrorHandler((error, request, reply) => {
+  const distinctId = request.user ? String(request.user.id) : 'anonymous';
+  posthog.captureException(error, distinctId);
+  reply.send(error);
+});
+
+process.on('SIGTERM', async () => { await posthog.shutdown(); process.exit(0); });
+process.on('SIGINT', async () => { await posthog.shutdown(); process.exit(0); });
 
 // ── Cron: fetch all sources every 10 minutes ──────────────────────────────
 

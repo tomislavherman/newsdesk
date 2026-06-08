@@ -1,7 +1,8 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { PostHogAnthropic } from '@posthog/ai/anthropic';
+import posthog from './posthog.js';
 import { getRecentFeedback } from './db.js';
 
-const client = new Anthropic();
+const client = new PostHogAnthropic({ posthog });
 const MODEL = 'claude-haiku-4-5-20251001';
 
 function parseJson(text) {
@@ -15,7 +16,7 @@ function parseJson(text) {
 }
 
 // Called only after RSS validation has already failed — does HTML selector detection via Claude.
-export async function analyzeSource(url, html) {
+export async function analyzeSource(url, html, userId = null) {
   const $ = (await import('cheerio')).load(html);
   $('script, style, svg, noscript, meta').remove();
   const main = $('main, [role="main"]').first();
@@ -44,6 +45,7 @@ Return only valid JSON, no explanation.`;
     model: MODEL,
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
+    ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
   const rawResponse = message.content[0].text;
@@ -76,6 +78,7 @@ Return only valid JSON, no explanation.`;
     model: MODEL,
     max_tokens: 1024,
     messages: [{ role: 'user', content: prompt }],
+    ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
   const rawResponse = message.content[0].text;

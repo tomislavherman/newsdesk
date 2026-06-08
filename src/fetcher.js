@@ -323,7 +323,7 @@ async function validateFeed(feedUrl) {
   }
 }
 
-export async function detectSourceConfig(url) {
+export async function detectSourceConfig(url, userId = null) {
   const html = await fetchHtml(url);
   const $ = cheerio.load(html);
   const name = $('title').first().text().trim() || new URL(url).hostname;
@@ -348,5 +348,5 @@ export async function detectSourceConfig(url) {
 
   // 2. Fall back to Claude HTML selector detection
   console.log(`[source] No valid RSS found, using HTML scraping for ${url}`);
-  return analyzeSource(url, html);
+  return analyzeSource(url, html, userId);
 }
