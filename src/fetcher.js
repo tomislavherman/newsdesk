@@ -2,7 +2,7 @@ import { fetch } from 'undici';
 import * as cheerio from 'cheerio';
 import RSSParser from 'rss-parser';
 import { getActiveSources, getSourceById, articleExistsByUrl, insertArticle } from './db.js';
-import { analyzeSource, summarizeArticle, warmClassifyCache } from './ai.js';
+import { analyzeSource, summarizeArticles, warmClassifyCache } from './ai.js';
 
 const rssParser = new RSSParser({
   customFields: {
@@ -235,85 +235,105 @@ function isTooOld(published_at, max_age_days) {
   return new Date(published_at).getTime() < cutoff;
 }
 
-async function processSource(source) {
+async function gatherNewArticles(source) {
   const articles = source.fetch_type === 'rss'
     ? await fetchRssArticles(source)
     : await fetchHtmlArticles(source);
 
   console.log(`[fetch] Found ${articles.length} articles from ${source.name}`);
-  let newCount = 0;
+  const pending = [];
 
   for (const article of articles) {
     if (!article.url) { console.log(`[fetch] Skipping article with no URL: "${article.title?.slice(0, 60)}"`); continue; }
     if (articleExistsByUrl(source.id, article.url)) continue;
-
     if (isTooOld(article.published_at, source.max_age_days ?? 7)) {
       console.log(`[fetch] Skipping old article: "${article.title?.slice(0, 60)}"`);
       continue;
     }
 
-    try {
-      const { content, image_url: pageImage } = await fetchArticlePage(article.url);
-      const image_url = article.image_url ?? pageImage;
-      console.log(`[fetch] Fetched content (${content.length} chars, image: ${!!image_url}): "${article.title?.slice(0, 60)}"`);
-      const result = await summarizeArticle(article.title, content, source.user_id);
-      insertArticle({
-        source_id: source.id,
-        url: article.url,
-        title: article.title,
-        summary: result.summary ?? null,
-        image_url: image_url ?? null,
-        published_at: article.published_at,
-        is_relevant: result.is_relevant === false ? 0 : 1,
-        relevance_reason: result.is_relevant === false ? (result.reason ?? null) : null,
-        analysis_notes: result._log ? JSON.stringify(result._log) : null,
-      });
-      newCount++;
-    } catch (err) {
-      console.error(`[fetch] Failed to process "${article.title}":`, err.message);
-      insertArticle({
-        source_id: source.id,
-        url: article.url,
-        title: article.title,
-        summary: null,
-        image_url: article.image_url ?? null,
-        published_at: article.published_at,
-        is_relevant: 1,
-        relevance_reason: null,
-        analysis_notes: null,
-      });
-      newCount++;
-    }
+    const { content, image_url: pageImage } = await fetchArticlePage(article.url);
+    const image_url = article.image_url ?? pageImage;
+    console.log(`[fetch] Fetched content (${content.length} chars, image: ${!!image_url}): "${article.title?.slice(0, 60)}"`);
+    pending.push({ source, article, content, image_url });
   }
 
-  console.log(`[fetch] Stored ${newCount} new articles from ${source.name}`);
-  return newCount;
+  return pending;
+}
+
+async function classifyAndInsert(pending, userId) {
+  if (pending.length === 0) return 0;
+
+  const results = await summarizeArticles(
+    pending.map(p => ({ title: p.article.title, content: p.content })),
+    userId
+  );
+
+  for (let i = 0; i < pending.length; i++) {
+    const { source, article, image_url } = pending[i];
+    const result = results[i] ?? {};
+    insertArticle({
+      source_id: source.id,
+      url: article.url,
+      title: article.title,
+      summary: result.summary ?? null,
+      image_url: image_url ?? null,
+      published_at: article.published_at,
+      is_relevant: result.is_relevant === false ? 0 : 1,
+      relevance_reason: result.is_relevant === false ? (result.reason ?? null) : null,
+      analysis_notes: null,
+    });
+  }
+
+  console.log(`[fetch] Classified and stored ${pending.length} articles`);
+  return pending.length;
 }
 
 export async function fetchAllSources() {
   const sources = getActiveSources();
-  const newByUser = {};
+  const pendingByUser = {};
   let totalNew = 0;
 
+  // Phase 1: gather new articles across all sources
   for (const source of sources) {
-    const uid = source.user_id;
-    if (uid != null && !(uid in newByUser)) newByUser[uid] = 0;
+    const uid = source.user_id ?? 'anon';
+    if (!(uid in pendingByUser)) pendingByUser[uid] = [];
     try {
-      console.log(`[fetch] Processing source: ${source.name ?? source.url}`);
-      const count = await processSource(source);
-      totalNew += count;
-      if (uid != null) newByUser[uid] += count;
+      console.log(`[fetch] Gathering from: ${source.name ?? source.url}`);
+      pendingByUser[uid].push(...await gatherNewArticles(source));
     } catch (err) {
-      console.error(`[fetch] Failed to fetch source ${source.name ?? source.url}:`, err.message);
+      console.error(`[fetch] Failed to gather from ${source.name ?? source.url}:`, err.message);
     }
   }
 
-  // Keep classification cache alive for users who had no new articles this cycle
-  for (const [uid, count] of Object.entries(newByUser)) {
-    if (count === 0) {
-      warmClassifyCache(Number(uid)).catch(err =>
-        console.error(`[fetch] Cache warmup failed for user ${uid}:`, err.message)
-      );
+  // Phase 2: classify per user in one batch each
+  for (const [uid, pending] of Object.entries(pendingByUser)) {
+    const userId = uid === 'anon' ? null : Number(uid);
+    if (pending.length === 0) {
+      if (userId != null) {
+        warmClassifyCache(userId).catch(err =>
+          console.error(`[fetch] Cache warmup failed for user ${uid}:`, err.message)
+        );
+      }
+      continue;
+    }
+    try {
+      totalNew += await classifyAndInsert(pending, userId);
+    } catch (err) {
+      console.error(`[fetch] Batch classify failed for user ${uid}:`, err.message);
+      for (const { source, article, image_url } of pending) {
+        insertArticle({
+          source_id: source.id,
+          url: article.url,
+          title: article.title,
+          summary: null,
+          image_url: image_url ?? null,
+          published_at: article.published_at,
+          is_relevant: 1,
+          relevance_reason: null,
+          analysis_notes: null,
+        });
+        totalNew++;
+      }
     }
   }
 
@@ -325,7 +345,8 @@ export async function fetchSource(id) {
   const source = getSourceById(id);
   if (!source) throw new Error(`Source ${id} not found`);
   console.log(`[fetch] Processing source: ${source.name ?? source.url}`);
-  const newCount = await processSource(source);
+  const pending = await gatherNewArticles(source);
+  const newCount = await classifyAndInsert(pending, source.user_id);
   console.log(`[fetch] Done. ${newCount} new articles.`);
   return { totalNew: newCount };
 }

@@ -4,7 +4,7 @@ import { getRecentFeedback } from './db.js';
 
 const client = new PostHogAnthropic({ posthog });
 const MODEL = 'claude-haiku-4-5-20251001';
-const CACHE_MIN_TOKENS = 1024;
+const CACHE_MIN_TOKENS = 4096;
 
 function parseJson(text) {
   try {
@@ -27,11 +27,12 @@ function buildClassifyPrefix(userId) {
     ? `\nThe user has previously dismissed these articles as not interesting:\n${recentFeedback.map(f => `- "${f.title}"${f.reason ? ` (reason: ${f.reason})` : ''}`).join('\n')}\n\nBased only on these dismissals, set is_relevant to false if this article clearly matches the same pattern. If there is no clear match, default to true.`
     : '';
 
-  return `Summarize this article and assess relevance. Return a JSON object with:
+  return `Summarize each article and assess relevance. For each article return a JSON object with:
 - summary (string): 2-3 neutral factual sentences summarizing the article
 - is_relevant (boolean): true by default; false only if the article clearly matches patterns from the user's dismissed articles below${feedbackSection ? '' : ' (no dismissals yet — always true)'}
 - reason (string|null): if is_relevant is false, a single sentence explaining why this article matches the user's dismissed patterns. null if is_relevant is true.
 ${feedbackSection}
+Return a JSON array with one object per article in the same order as the input.
 Return only valid JSON, no explanation.`;
 }
 
@@ -77,25 +78,28 @@ Return only valid JSON, no explanation.`;
   };
 }
 
-export async function summarizeArticle(title, content, userId = null) {
+export async function summarizeArticles(articles, userId = null) {
+  if (articles.length === 0) return [];
+
   const prefix = buildClassifyPrefix(userId);
   const shouldCache = estimateTokens(prefix) >= CACHE_MIN_TOKENS;
 
-  const articlePart = `Article title: ${title}
-Article content: ${content?.slice(0, 3000) ?? '(no content)'}`;
+  const articlesPart = articles
+    .map((a, i) => `Article ${i + 1}\nTitle: ${a.title}\nContent: ${a.content?.slice(0, 3000) ?? '(no content)'}`)
+    .join('\n\n');
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: Math.max(1024, articles.length * 300),
     messages: [{
       role: 'user',
       content: [
         {
           type: 'text',
           text: prefix,
-          ...(shouldCache ? { cache_control: { type: 'ephemeral', ttl: 3600 } } : {}),
+          ...(shouldCache ? { cache_control: { type: 'ephemeral', ttl: '1h' } } : {}),
         },
-        { type: 'text', text: articlePart },
+        { type: 'text', text: articlesPart },
       ],
     }],
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
@@ -103,11 +107,14 @@ Article content: ${content?.slice(0, 3000) ?? '(no content)'}`;
 
   const rawResponse = message.content[0].text;
   const parsed = parseJson(rawResponse);
+  const results = Array.isArray(parsed) ? parsed : [parsed];
 
-  return {
-    ...parsed,
-    _log: { model: MODEL, prefix, article_part: articlePart, raw_response: rawResponse, parsed },
-  };
+  // Pad with defaults if model returned fewer results than articles
+  while (results.length < articles.length) {
+    results.push({ summary: null, is_relevant: true, reason: null });
+  }
+
+  return results;
 }
 
 export async function warmClassifyCache(userId) {
@@ -123,7 +130,7 @@ export async function warmClassifyCache(userId) {
         {
           type: 'text',
           text: prefix,
-          cache_control: { type: 'ephemeral', ttl: 3600 },
+          cache_control: { type: 'ephemeral', ttl: '1h' },
         },
         { type: 'text', text: 'ping' },
       ],
