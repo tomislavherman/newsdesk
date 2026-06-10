@@ -11,18 +11,15 @@ const MODEL = process.env.AI_MODEL ?? 'claude-haiku-4-5-20251001';
 const CACHE_MIN_TOKENS = 4096;
 
 function parseJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-    try {
-      return JSON.parse(stripped);
-    } catch {
-      const match = text.match(/\{[\s\S]*\}/) ?? text.match(/\[[\s\S]*\]/);
-      if (match) return JSON.parse(match[0]);
-      throw new Error('No JSON found in response');
-    }
+  // strip leading ```json or ``` and trailing ```
+  const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+  // extract first {...} object or [...] array when surrounded by other text
+  const match = text.match(/\{[\s\S]*\}/) ?? text.match(/\[[\s\S]*\]/);
+  for (const candidate of [text, stripped, match?.[0]]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch {}
   }
+  throw new Error('No JSON found in response');
 }
 
 function estimateTokens(text) {
