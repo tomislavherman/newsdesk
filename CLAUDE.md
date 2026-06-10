@@ -252,7 +252,9 @@ Single HTML file, vanilla JS, no build step, no framework.
 ## Environment variables
 
 ```
-ANTHROPIC_API_KEY=   # Required
+ANTHROPIC_API_KEY=   # Required (or provider equivalent)
+ANTHROPIC_BASE_URL=  # Optional. Override API base URL (e.g. https://api.deepseek.com)
+AI_MODEL=            # Optional. Defaults to claude-haiku-4-5-20251001 (e.g. deepseek-chat)
 POSTHOG_API_KEY=     # Optional. Enables analytics and LLM observability
 POSTHOG_HOST=        # Optional. Defaults to https://us.i.posthog.com
 PORT=3000            # Optional, defaults to 3000

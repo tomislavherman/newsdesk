@@ -2,17 +2,26 @@ import { PostHogAnthropic } from '@posthog/ai/anthropic';
 import posthog from './posthog.js';
 import { getRecentFeedback } from './db.js';
 
-const client = new PostHogAnthropic({ posthog });
-const MODEL = 'claude-haiku-4-5-20251001';
+const client = new PostHogAnthropic({
+  posthog,
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
+});
+const MODEL = process.env.AI_MODEL ?? 'claude-haiku-4-5-20251001';
 const CACHE_MIN_TOKENS = 4096;
 
 function parseJson(text) {
   try {
     return JSON.parse(text);
   } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error('No JSON found in response');
+    const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    try {
+      return JSON.parse(stripped);
+    } catch {
+      const match = text.match(/\{[\s\S]*\}/) ?? text.match(/\[[\s\S]*\]/);
+      if (match) return JSON.parse(match[0]);
+      throw new Error('No JSON found in response');
+    }
   }
 }
 
@@ -69,7 +78,7 @@ Return only valid JSON, no explanation.`;
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
-  const rawResponse = message.content[0].text;
+  const rawResponse = message.content.find(b => b.type === 'text').text;
   const parsed = parseJson(rawResponse);
 
   return {
@@ -105,7 +114,7 @@ export async function summarizeArticles(articles, userId = null) {
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
-  const rawResponse = message.content[0].text;
+  const rawResponse = message.content.find(b => b.type === 'text').text;
   const parsed = parseJson(rawResponse);
   const results = Array.isArray(parsed) ? parsed : [parsed];
 
