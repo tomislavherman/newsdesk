@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node --env-file=.env src/index.js",
-    "dev": "node --env-file=.env --watch --inspect src/index.js"
+    "dev": "node --env-file=.env --watch --inspect src/index.js",
+    "benchmark": "node --env-file=.env scripts/benchmark.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",
