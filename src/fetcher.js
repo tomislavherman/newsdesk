@@ -243,9 +243,12 @@ async function gatherNewArticles(source) {
   console.log(`[fetch] Found ${articles.length} articles from ${source.name}`);
   const pending = [];
 
+  const seenUrls = new Set();
   for (const article of articles) {
     if (!article.url) { console.log(`[fetch] Skipping article with no URL: "${article.title?.slice(0, 60)}"`); continue; }
+    if (seenUrls.has(article.url)) continue;
     if (articleExistsByUrl(source.id, article.url)) continue;
+    seenUrls.add(article.url);
     if (isTooOld(article.published_at, source.max_age_days ?? 7)) {
       console.log(`[fetch] Skipping old article: "${article.title?.slice(0, 60)}"`);
       continue;
@@ -263,7 +266,7 @@ async function gatherNewArticles(source) {
 async function classifyAndInsert(pending, userId) {
   if (pending.length === 0) return 0;
 
-  const results = await summarizeArticles(
+  const { results, _log } = await summarizeArticles(
     pending.map(p => ({ title: p.article.title, content: p.content })),
     userId
   );
@@ -280,7 +283,7 @@ async function classifyAndInsert(pending, userId) {
       published_at: article.published_at,
       is_relevant: result.is_relevant === false ? 0 : 1,
       relevance_reason: result.is_relevant === false ? (result.reason ?? null) : null,
-      analysis_notes: null,
+      analysis_notes: _log ? JSON.stringify({ ..._log, parsed: result }) : null,
     });
   }
 

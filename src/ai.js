@@ -70,12 +70,13 @@ Return only valid JSON, no explanation.`;
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 8192,
+    temperature: 0,
     messages: [{ role: 'user', content: prompt }],
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
-  const rawResponse = message.content.find(b => b.type === 'text').text;
+  const rawResponse = (message.content.find(b => b.type === 'text') ?? message.content.find(b => b.text)).text;
   const parsed = parseJson(rawResponse);
 
   return {
@@ -85,7 +86,7 @@ Return only valid JSON, no explanation.`;
 }
 
 export async function summarizeArticles(articles, userId = null) {
-  if (articles.length === 0) return [];
+  if (articles.length === 0) return { results: [], _log: null };
 
   const prefix = buildClassifyPrefix(userId);
   const shouldCache = estimateTokens(prefix) >= CACHE_MIN_TOKENS;
@@ -96,7 +97,7 @@ export async function summarizeArticles(articles, userId = null) {
 
   const message = await client.messages.create({
     model: MODEL,
-    max_tokens: Math.max(1024, articles.length * 300),
+    max_tokens: Math.max(4096, articles.length * 300),
     messages: [{
       role: 'user',
       content: [
@@ -111,7 +112,7 @@ export async function summarizeArticles(articles, userId = null) {
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
   });
 
-  const rawResponse = message.content.find(b => b.type === 'text').text;
+  const rawResponse = (message.content.find(b => b.type === 'text') ?? message.content.find(b => b.text)).text;
   const parsed = parseJson(rawResponse);
   const results = Array.isArray(parsed) ? parsed : [parsed];
 
@@ -120,7 +121,8 @@ export async function summarizeArticles(articles, userId = null) {
     results.push({ summary: null, is_relevant: true, reason: null });
   }
 
-  return results;
+  const _log = { model: MODEL, prompt: prefix + '\n\n' + articlesPart, raw_response: rawResponse };
+  return { results, _log };
 }
 
 export async function warmClassifyCache(userId) {
