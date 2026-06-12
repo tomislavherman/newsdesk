@@ -287,24 +287,34 @@ async function classifyAndInsert(pending: PendingArticle[], userId: number | nul
     userId
   );
 
+  let stored = 0;
   for (let i = 0; i < pending.length; i++) {
     const { source, article, image_url } = pending[i];
     const result = results[i] ?? {};
-    insertArticle({
-      source_id: source.id,
-      url: article.url,
-      title: article.title,
-      summary: result.summary ?? null,
-      image_url: image_url ?? null,
-      published_at: article.published_at,
-      is_relevant: result.is_relevant === false ? 0 : 1,
-      relevance_reason: result.is_relevant === false ? (result.reason ?? null) : null,
-      analysis_notes: _log ? JSON.stringify({ ..._log, parsed: result }) : null,
-    });
+    try {
+      insertArticle({
+        source_id: source.id,
+        url: article.url,
+        title: article.title,
+        summary: result.summary ?? null,
+        image_url: image_url ?? null,
+        published_at: article.published_at,
+        is_relevant: result.is_relevant === false ? 0 : 1,
+        relevance_reason: result.is_relevant === false ? (result.reason ?? null) : null,
+        analysis_notes: _log ? JSON.stringify({ ..._log, parsed: result }) : null,
+      });
+      stored++;
+    } catch (err) {
+      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+        console.log(`[fetch] Skipping article — source ${source.id} was deleted during fetch`);
+      } else {
+        throw err;
+      }
+    }
   }
 
-  console.log(`[fetch] Classified and stored ${pending.length} articles`);
-  return pending.length;
+  console.log(`[fetch] Classified and stored ${stored} articles`);
+  return stored;
 }
 
 export async function fetchAllSources(): Promise<{ totalNew: number }> {
@@ -338,18 +348,26 @@ export async function fetchAllSources(): Promise<{ totalNew: number }> {
     } catch (err) {
       console.error(`[fetch] Batch classify failed for user ${uid}:`, (err as Error).message);
       for (const { source, article, image_url } of pending) {
-        insertArticle({
-          source_id: source.id,
-          url: article.url,
-          title: article.title,
-          summary: null,
-          image_url: image_url ?? null,
-          published_at: article.published_at,
-          is_relevant: 1,
-          relevance_reason: null,
-          analysis_notes: null,
-        });
-        totalNew++;
+        try {
+          insertArticle({
+            source_id: source.id,
+            url: article.url,
+            title: article.title,
+            summary: null,
+            image_url: image_url ?? null,
+            published_at: article.published_at,
+            is_relevant: 1,
+            relevance_reason: null,
+            analysis_notes: null,
+          });
+          totalNew++;
+        } catch (insertErr) {
+          if ((insertErr as { code?: string }).code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+            console.log(`[fetch] Skipping article — source ${source.id} was deleted during fetch`);
+          } else {
+            throw insertErr;
+          }
+        }
       }
     }
   }

@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx --env-file=.env --import ./src/instrumentation.ts watch src/index.ts",
+    "dev": "tsx watch --env-file=.env --import ./src/instrumentation.ts src/index.ts",
     "build": "tsc",
     "start": "node --env-file=.env --import ./dist/instrumentation.js dist/index.js",
     "typecheck": "tsc --noEmit",
