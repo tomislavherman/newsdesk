@@ -5,9 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx --env-file=.env watch src/index.ts",
+    "dev": "tsx --env-file=.env --import ./src/instrumentation.ts watch src/index.ts",
     "build": "tsc",
-    "start": "node --env-file=.env dist/index.js",
+    "start": "node --env-file=.env --import ./dist/instrumentation.js dist/index.js",
     "typecheck": "tsc --noEmit",
     "benchmark": "tsx --env-file=.env scripts/benchmark.ts"
   },
