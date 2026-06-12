@@ -6,3 +6,4 @@ news.db
 *.db-wal
 posthog-setup-report.md
 .claude/settings.local.json
+.kopairc
