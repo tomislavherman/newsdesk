@@ -1,32 +1,60 @@
 import { PostHogAnthropic } from '@posthog/ai/anthropic';
+import type Anthropic from '@anthropic-ai/sdk';
 import posthog from './posthog.js';
 import { getRecentFeedback } from './db.js';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const client = new PostHogAnthropic({
   posthog,
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.ANTHROPIC_API_KEY ?? '',
   ...(process.env.ANTHROPIC_BASE_URL ? { baseURL: process.env.ANTHROPIC_BASE_URL } : {}),
-});
+} as ConstructorParameters<typeof PostHogAnthropic>[0]);
+
 const MODEL = process.env.AI_MODEL ?? 'claude-haiku-4-5-20251001';
 const CACHE_MIN_TOKENS = 4096;
 
-function parseJson(text) {
-  // strip leading ```json or ``` and trailing ```
+export interface ClassifyResult {
+  summary: string | null;
+  is_relevant: boolean;
+  reason: string | null;
+}
+
+export interface AnalyzeSourceResult {
+  has_rss: boolean;
+  feed_url: string | null;
+  selector: string | null;
+  date_selector: string | null;
+  image_selector: string | null;
+  name: string;
+  _log: {
+    model: string;
+    prompt: string;
+    raw_response: string;
+    parsed: unknown;
+  } | null;
+}
+
+function parseJson(text: string): unknown {
   const stripped = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-  // extract first {...} object or [...] array when surrounded by other text
   const match = text.match(/\{[\s\S]*\}/) ?? text.match(/\[[\s\S]*\]/);
   for (const candidate of [text, stripped, match?.[0]]) {
     if (!candidate) continue;
-    try { return JSON.parse(candidate); } catch {}
+    try { return JSON.parse(candidate); } catch { /* try next */ }
   }
   throw new Error('No JSON found in response');
 }
 
-function estimateTokens(text) {
+function estimateTokens(text: string): number {
   return Math.floor(text.length / 4);
 }
 
-function buildClassifyPrefix(userId) {
+function extractText(message: Anthropic.Message): string {
+  const block = message.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
+  if (!block) throw new Error('No text block in AI response');
+  return block.text;
+}
+
+function buildClassifyPrefix(userId: number | null): string {
   const recentFeedback = userId ? getRecentFeedback(userId, 50) : [];
 
   const feedbackSection = recentFeedback.length > 0
@@ -43,12 +71,14 @@ Return only valid JSON, no explanation.`;
 }
 
 // Called only after RSS validation has already failed — does HTML selector detection via Claude.
-export async function analyzeSource(url, html, userId = null) {
-  const $ = (await import('cheerio')).load(html);
+export async function analyzeSource(url: string, html: string, userId: number | null = null): Promise<AnalyzeSourceResult> {
+  const { load } = await import('cheerio');
+  const $ = load(html);
   $('script, style, svg, noscript, meta').remove();
   const main = $('main, [role="main"]').first();
   const body = main.length ? $.html(main) : $.html($('body'));
   const truncated = body.slice(-30000);
+
   const prompt = `Analyze this news site HTML and identify article selectors. Return a JSON object with:
 - has_rss (boolean): false
 - feed_url (string|null): null
@@ -68,24 +98,27 @@ ${truncated}
 
 Return only valid JSON, no explanation.`;
 
-  const message = await client.messages.create({
+  const message = await (client as unknown as Anthropic).messages.create({
     model: MODEL,
     max_tokens: 8192,
     temperature: 0,
     messages: [{ role: 'user', content: prompt }],
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
-  });
+  } as Parameters<Anthropic['messages']['create']>[0]) as Anthropic.Message;
 
-  const rawResponse = (message.content.find(b => b.type === 'text') ?? message.content.find(b => b.text)).text;
+  const rawResponse = extractText(message);
   const parsed = parseJson(rawResponse);
 
   return {
-    ...parsed,
+    ...(parsed as object),
     _log: { model: MODEL, prompt, raw_response: rawResponse, parsed },
-  };
+  } as AnalyzeSourceResult;
 }
 
-export async function summarizeArticles(articles, userId = null) {
+export async function summarizeArticles(
+  articles: Array<{ title: string | null; content: string }>,
+  userId: number | null = null
+): Promise<{ results: ClassifyResult[]; _log: { model: string; prompt: string; raw_response: string } | null }> {
   if (articles.length === 0) return { results: [], _log: null };
 
   const prefix = buildClassifyPrefix(userId);
@@ -95,54 +128,56 @@ export async function summarizeArticles(articles, userId = null) {
     .map((a, i) => `Article ${i + 1}\nTitle: ${a.title}\nContent: ${a.content?.slice(0, 3000) ?? '(no content)'}`)
     .join('\n\n');
 
-  const message = await client.messages.create({
+  const cacheControl = { type: 'ephemeral' as const, ttl: '1h' } as { type: 'ephemeral' };
+
+  const message = await (client as unknown as Anthropic).messages.create({
     model: MODEL,
     max_tokens: Math.max(4096, articles.length * 300),
     messages: [{
       role: 'user',
       content: [
         {
-          type: 'text',
+          type: 'text' as const,
           text: prefix,
-          ...(shouldCache ? { cache_control: { type: 'ephemeral', ttl: '1h' } } : {}),
+          ...(shouldCache ? { cache_control: cacheControl } : {}),
         },
-        { type: 'text', text: articlesPart },
+        { type: 'text' as const, text: articlesPart },
       ],
     }],
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
-  });
+  } as Parameters<Anthropic['messages']['create']>[0]) as Anthropic.Message;
 
-  const rawResponse = (message.content.find(b => b.type === 'text') ?? message.content.find(b => b.text)).text;
+  const rawResponse = extractText(message);
   const parsed = parseJson(rawResponse);
-  const results = Array.isArray(parsed) ? parsed : [parsed];
+  const results: ClassifyResult[] = Array.isArray(parsed) ? parsed as ClassifyResult[] : [parsed as ClassifyResult];
 
-  // Pad with defaults if model returned fewer results than articles
   while (results.length < articles.length) {
     results.push({ summary: null, is_relevant: true, reason: null });
   }
 
-  const _log = { model: MODEL, prompt: prefix + '\n\n' + articlesPart, raw_response: rawResponse };
-  return { results, _log };
+  return { results, _log: { model: MODEL, prompt: prefix + '\n\n' + articlesPart, raw_response: rawResponse } };
 }
 
-export async function warmClassifyCache(userId) {
+export async function warmClassifyCache(userId: number): Promise<void> {
   const prefix = buildClassifyPrefix(userId);
   if (estimateTokens(prefix) < CACHE_MIN_TOKENS) return;
 
-  await client.messages.create({
+  const cacheControl = { type: 'ephemeral' as const, ttl: '1h' } as { type: 'ephemeral' };
+
+  await (client as unknown as Anthropic).messages.create({
     model: MODEL,
     max_tokens: 1,
     messages: [{
       role: 'user',
       content: [
         {
-          type: 'text',
+          type: 'text' as const,
           text: prefix,
-          cache_control: { type: 'ephemeral', ttl: '1h' },
+          cache_control: cacheControl,
         },
-        { type: 'text', text: 'ping' },
+        { type: 'text' as const, text: 'ping' },
       ],
     }],
     ...(userId ? { posthogDistinctId: String(userId) } : {}),
-  });
+  } as Parameters<Anthropic['messages']['create']>[0]);
 }

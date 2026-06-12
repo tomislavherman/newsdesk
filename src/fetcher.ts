@@ -3,8 +3,16 @@ import * as cheerio from 'cheerio';
 import RSSParser from 'rss-parser';
 import { getActiveSources, getSourceById, articleExistsByUrl, insertArticle } from './db.js';
 import { analyzeSource, summarizeArticles, warmClassifyCache } from './ai.js';
+import type { Source } from './types.js';
 
-const rssParser = new RSSParser({
+type RSSItem = RSSParser.Item & {
+  mediaContent?: { $?: { url?: string } } | Array<{ $?: { url?: string } }>;
+  mediaThumbnail?: { $?: { url?: string } } | Array<{ $?: { url?: string } }>;
+  'content:encoded'?: string;
+  enclosure?: { url?: string; type?: string };
+};
+
+const rssParser = new RSSParser<Record<string, unknown>, RSSItem>({
   customFields: {
     item: [
       ['media:content', 'mediaContent'],
@@ -15,7 +23,21 @@ const rssParser = new RSSParser({
   },
 });
 
-async function fetchHtml(url) {
+interface RawArticle {
+  url: string;
+  title: string | null;
+  published_at: string | null;
+  image_url: string | null;
+}
+
+interface PendingArticle {
+  source: Source;
+  article: RawArticle;
+  content: string;
+  image_url: string | null;
+}
+
+async function fetchHtml(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Newsdesk/1.0)' },
     signal: AbortSignal.timeout(15000),
@@ -24,91 +46,91 @@ async function fetchHtml(url) {
   return res.text();
 }
 
-function parseDate(text) {
+function parseDate(text: string | null | undefined): string | null {
   if (!text) return null;
   const d = new Date(text.trim());
   return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function extractRssImage(item) {
-  // Standard media elements
+function extractRssImage(item: RSSItem): string | null {
   if (item.enclosure?.url && item.enclosure.type?.startsWith('image/')) return item.enclosure.url;
+
   const mc = item.mediaContent;
   if (mc) {
-    const url = mc?.$ ? mc.$.url : (Array.isArray(mc) ? mc[0]?.$.url : null);
+    const url = (mc as { $?: { url?: string } })?.$?.url
+      ?? (Array.isArray(mc) ? (mc as Array<{ $?: { url?: string } }>)[0]?.$?.url : null);
     if (url) return url;
   }
+
   const mt = item.mediaThumbnail;
   if (mt) {
-    const url = mt?.$ ? mt.$.url : (Array.isArray(mt) ? mt[0]?.$.url : null);
+    const url = (mt as { $?: { url?: string } })?.$?.url
+      ?? (Array.isArray(mt) ? (mt as Array<{ $?: { url?: string } }>)[0]?.$?.url : null);
     if (url) return url;
   }
-  // Fall back to first <img src> in content HTML (e.g. GitHub blog embeds images in content:encoded)
-  const contentHtml = item['content:encoded'] ?? item.content ?? '';
+
+  const contentHtml = item['content:encoded'] ?? (item.content ?? '');
   if (contentHtml) {
     const match = contentHtml.match(/<img[^>]+src="([^"]+)"/i);
     if (match?.[1] && !match[1].startsWith('data:')) {
-      // Strip resize query params, keep the base URL
       return match[1].split('?')[0];
     }
   }
+
   return null;
 }
 
-async function fetchRssArticles(source) {
-  let feed;
+async function fetchRssArticles(source: Source): Promise<RawArticle[]> {
+  let feed: Awaited<ReturnType<typeof rssParser.parseURL>>;
   try {
-    feed = await rssParser.parseURL(source.feed_url);
+    feed = await rssParser.parseURL(source.feed_url!);
   } catch (err) {
-    console.error(`[fetch] RSS parse failed for ${source.feed_url}: ${err.message}`);
+    console.error(`[fetch] RSS parse failed for ${source.feed_url}: ${(err as Error).message}`);
     return [];
   }
   return feed.items.map(item => ({
-    url: item.link,
-    title: item.title,
+    url: item.link ?? '',
+    title: item.title ?? null,
     image_url: extractRssImage(item),
     published_at: item.pubDate ? new Date(item.pubDate).toISOString() : null,
   }));
 }
 
-async function fetchHtmlArticles(source) {
+async function fetchHtmlArticles(source: Source): Promise<RawArticle[]> {
   const html = await fetchHtml(source.url);
   const $ = cheerio.load(html);
-  const articles = [];
-
+  const articles: RawArticle[] = [];
   const sourceHost = new URL(source.url).hostname;
 
-  $(source.selector).each((_, el) => {
+  $(source.selector!).each((_, el) => {
     const $el = $(el);
 
-    // Score each link: longest text wins (titles >> nav/action links).
-    // Small bonus for external links to break ties between equally long texts.
-    let bestLink = null;
+    let bestLink: ReturnType<typeof $> | null = null;
     let bestScore = -1;
     $el.find('a[href]').each((_, a) => {
       const $a = $(a);
       const text = $a.text().trim();
-      if (text.length < 4) return; // skip icon-only or very short links
+      if (text.length < 4) return;
       let score = text.length;
       try {
         const href = $a.attr('href') ?? '';
         if (href.startsWith('http') && new URL(href).hostname !== sourceHost) score += 20;
-      } catch {}
+      } catch { /* ignore invalid URLs */ }
       if (score > bestScore) { bestScore = score; bestLink = $a; }
     });
-    const link = bestLink ?? $el.find('a[href]').first();
 
+    const link = bestLink ?? $el.find('a[href]').first();
     const url = link?.attr('href');
     if (!url) return;
 
     const absoluteUrl = url.startsWith('http') ? url : new URL(url, source.url).href;
 
-    let published_at = null;
+    let published_at: string | null = null;
     if (source.date_selector) {
       published_at = parseDate($el.find(source.date_selector).first().text());
     }
 
-    let image_url = null;
+    let image_url: string | null = null;
     if (source.image_selector) {
       const img = $el.find(source.image_selector).first();
       const src = img.attr('src') ?? img.attr('data-src') ?? img.attr('data-lazy-src');
@@ -116,13 +138,10 @@ async function fetchHtmlArticles(source) {
     }
 
     const rawTitle = link.text().trim() || $el.text().trim();
-    // Strip leading rank numbers like "28. " or "1) "
     const title = rawTitle.replace(/^\d+[.)]\s*/, '').trim();
     articles.push({ url: absoluteUrl, title, published_at, image_url });
   });
 
-  // Fallback for JS-rendered pages (e.g. Next.js SPAs): try to extract articles
-  // from embedded JSON data when the selector matched nothing.
   if (articles.length === 0) {
     const extracted = extractEmbeddedArticles($, source.url);
     if (extracted.length > 0) {
@@ -134,74 +153,71 @@ async function fetchHtmlArticles(source) {
   return articles;
 }
 
-function extractEmbeddedArticles($, baseUrl) {
-  const results = [];
-  const seen = new Set();
+function extractEmbeddedArticles($: cheerio.CheerioAPI, baseUrl: string): RawArticle[] {
+  const results: RawArticle[] = [];
+  const seen = new Set<string>();
 
-  function addArticle(url, title, published_at = null) {
+  function addArticle(url: string | undefined | null, title: unknown, published_at: string | null = null) {
     if (!url || !title || seen.has(url)) return;
     seen.add(url);
     const absoluteUrl = url.startsWith('http') ? url : new URL(url, baseUrl).href;
     results.push({ url: absoluteUrl, title: String(title).trim(), published_at, image_url: null });
   }
 
-  // 1. JSON-LD structured data
   $('script[type="application/ld+json"]').each((_, el) => {
     try {
-      const data = JSON.parse($(el).text());
+      const data = JSON.parse($(el).text()) as Record<string, unknown>;
       const items = Array.isArray(data) ? data : [data];
-      for (const item of items) {
-        const entries = item['@graph'] ?? (Array.isArray(item.itemListElement) ? item.itemListElement : [item]);
-        for (const entry of entries) {
+      for (const item of items as Record<string, unknown>[]) {
+        const entries = (item['@graph'] as unknown[] ?? (Array.isArray(item.itemListElement) ? item.itemListElement as unknown[] : [item]));
+        for (const entry of entries as Record<string, unknown>[]) {
           const type = entry['@type'];
           if (type === 'Article' || type === 'BlogPosting' || type === 'NewsArticle') {
-            addArticle(entry.url, entry.headline ?? entry.name, entry.datePublished ?? null);
+            addArticle(entry.url as string, entry.headline ?? entry.name, (entry.datePublished as string) ?? null);
           }
           if (type === 'ListItem' && entry.item) {
-            addArticle(entry.item.url ?? entry.item['@id'], entry.item.name ?? entry.name);
+            const i = entry.item as Record<string, unknown>;
+            addArticle((i.url ?? i['@id']) as string, i.name ?? entry.name);
           }
         }
       }
-    } catch {}
+    } catch { /* skip malformed JSON-LD */ }
   });
 
   if (results.length > 0) return results;
 
-  // 2. Next.js __NEXT_DATA__
   const nextDataEl = $('script#__NEXT_DATA__');
   if (nextDataEl.length) {
     try {
-      const nextData = JSON.parse(nextDataEl.text());
-      // Walk the props tree looking for arrays of objects with url/title/slug fields
-      function walk(obj, depth = 0) {
+      const nextData = JSON.parse(nextDataEl.text()) as Record<string, unknown>;
+      function walk(obj: unknown, depth = 0): void {
         if (depth > 8 || !obj || typeof obj !== 'object') return;
         if (Array.isArray(obj)) {
-          for (const item of obj) {
+          for (const item of obj as Record<string, unknown>[]) {
             if (item && typeof item === 'object' && (item.title || item.headline || item.name) && (item.url || item.slug || item.href || item.path)) {
-              const url = item.url ?? item.href ?? item.path ?? (item.slug ? new URL(item.slug, baseUrl).href : null);
-              addArticle(url, item.title ?? item.headline ?? item.name, item.date ?? item.publishedAt ?? item.datePublished ?? null);
+              const url = (item.url ?? item.href ?? item.path ?? (item.slug ? new URL(String(item.slug), baseUrl).href : null)) as string | null;
+              addArticle(url, item.title ?? item.headline ?? item.name, (item.date ?? item.publishedAt ?? item.datePublished) as string ?? null);
             } else {
               walk(item, depth + 1);
             }
           }
         } else {
-          for (const val of Object.values(obj)) walk(val, depth + 1);
+          for (const val of Object.values(obj as object)) walk(val, depth + 1);
         }
       }
-      walk(nextData?.props?.pageProps);
-    } catch {}
+      walk((nextData?.props as Record<string, unknown>)?.pageProps);
+    } catch { /* skip malformed __NEXT_DATA__ */ }
   }
 
   return results;
 }
 
-async function fetchArticlePage(url) {
+async function fetchArticlePage(url: string): Promise<{ content: string; image_url: string | null }> {
   try {
     const html = await fetchHtml(url);
     const $ = cheerio.load(html);
 
-    // Extract image: prefer og:image, fall back to first meaningful img in content
-    let image_url = $('meta[property="og:image"]').attr('content')
+    let image_url: string | null = $('meta[property="og:image"]').attr('content')
       ?? $('meta[name="twitter:image"]').attr('content')
       ?? null;
 
@@ -213,7 +229,7 @@ async function fetchArticlePage(url) {
         const src = $(img).attr('src');
         if (src && !src.startsWith('data:') && src.includes('.')) {
           image_url = src.startsWith('http') ? src : new URL(src, url).href;
-          return false; // break
+          return false;
         }
       });
     }
@@ -229,21 +245,21 @@ async function fetchArticlePage(url) {
   }
 }
 
-function isTooOld(published_at, max_age_days) {
-  if (!published_at) return false; // no date = let it through
+function isTooOld(published_at: string | null, max_age_days: number): boolean {
+  if (!published_at) return false;
   const cutoff = Date.now() - max_age_days * 24 * 60 * 60 * 1000;
   return new Date(published_at).getTime() < cutoff;
 }
 
-async function gatherNewArticles(source) {
+async function gatherNewArticles(source: Source): Promise<PendingArticle[]> {
   const articles = source.fetch_type === 'rss'
     ? await fetchRssArticles(source)
     : await fetchHtmlArticles(source);
 
   console.log(`[fetch] Found ${articles.length} articles from ${source.name}`);
-  const pending = [];
+  const pending: PendingArticle[] = [];
+  const seenUrls = new Set<string>();
 
-  const seenUrls = new Set();
   for (const article of articles) {
     if (!article.url) { console.log(`[fetch] Skipping article with no URL: "${article.title?.slice(0, 60)}"`); continue; }
     if (seenUrls.has(article.url)) continue;
@@ -263,7 +279,7 @@ async function gatherNewArticles(source) {
   return pending;
 }
 
-async function classifyAndInsert(pending, userId) {
+async function classifyAndInsert(pending: PendingArticle[], userId: number | null): Promise<number> {
   if (pending.length === 0) return 0;
 
   const { results, _log } = await summarizeArticles(
@@ -291,30 +307,28 @@ async function classifyAndInsert(pending, userId) {
   return pending.length;
 }
 
-export async function fetchAllSources() {
+export async function fetchAllSources(): Promise<{ totalNew: number }> {
   const sources = getActiveSources();
-  const pendingByUser = {};
+  const pendingByUser: Record<string, PendingArticle[]> = {};
   let totalNew = 0;
 
-  // Phase 1: gather new articles across all sources
   for (const source of sources) {
-    const uid = source.user_id ?? 'anon';
+    const uid = source.user_id != null ? String(source.user_id) : 'anon';
     if (!(uid in pendingByUser)) pendingByUser[uid] = [];
     try {
       console.log(`[fetch] Gathering from: ${source.name ?? source.url}`);
       pendingByUser[uid].push(...await gatherNewArticles(source));
     } catch (err) {
-      console.error(`[fetch] Failed to gather from ${source.name ?? source.url}:`, err.message);
+      console.error(`[fetch] Failed to gather from ${source.name ?? source.url}:`, (err as Error).message);
     }
   }
 
-  // Phase 2: classify per user in one batch each
   for (const [uid, pending] of Object.entries(pendingByUser)) {
     const userId = uid === 'anon' ? null : Number(uid);
     if (pending.length === 0) {
       if (userId != null) {
         warmClassifyCache(userId).catch(err =>
-          console.error(`[fetch] Cache warmup failed for user ${uid}:`, err.message)
+          console.error(`[fetch] Cache warmup failed for user ${uid}:`, (err as Error).message)
         );
       }
       continue;
@@ -322,7 +336,7 @@ export async function fetchAllSources() {
     try {
       totalNew += await classifyAndInsert(pending, userId);
     } catch (err) {
-      console.error(`[fetch] Batch classify failed for user ${uid}:`, err.message);
+      console.error(`[fetch] Batch classify failed for user ${uid}:`, (err as Error).message);
       for (const { source, article, image_url } of pending) {
         insertArticle({
           source_id: source.id,
@@ -344,7 +358,7 @@ export async function fetchAllSources() {
   return { totalNew };
 }
 
-export async function fetchSource(id) {
+export async function fetchSource(id: number): Promise<{ totalNew: number }> {
   const source = getSourceById(id);
   if (!source) throw new Error(`Source ${id} not found`);
   console.log(`[fetch] Processing source: ${source.name ?? source.url}`);
@@ -354,22 +368,21 @@ export async function fetchSource(id) {
   return { totalNew: newCount };
 }
 
-async function validateFeed(feedUrl) {
+async function validateFeed(feedUrl: string): Promise<string | null> {
   try {
     const feed = await rssParser.parseURL(feedUrl);
-    return feed.items?.length > 0 ? feedUrl : null;
+    return (feed.items?.length ?? 0) > 0 ? feedUrl : null;
   } catch {
     return null;
   }
 }
 
-export async function detectSourceConfig(url, userId = null) {
+export async function detectSourceConfig(url: string, userId: number | null = null) {
   const html = await fetchHtml(url);
   const $ = cheerio.load(html);
   const name = $('title').first().text().trim() || new URL(url).hostname;
 
-  // 1. Try <link rel="alternate"> RSS/Atom tags from the page head
-  const linkCandidates = [];
+  const linkCandidates: string[] = [];
   $('link[rel="alternate"]').each((_, el) => {
     const type = $(el).attr('type') ?? '';
     if (type.includes('rss') || type.includes('atom')) {
@@ -386,7 +399,6 @@ export async function detectSourceConfig(url, userId = null) {
     }
   }
 
-  // 2. Fall back to Claude HTML selector detection
   console.log(`[source] No valid RSS found, using HTML scraping for ${url}`);
   return analyzeSource(url, html, userId);
 }
