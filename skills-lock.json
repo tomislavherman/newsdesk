@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "create-dashboard": {
+      "source": "kopai-app/kopai-mono",
+      "sourceType": "github",
+      "skillPath": "skills/create-dashboard/SKILL.md",
+      "computedHash": "bb21eadfb0fe541d257f609296dcd2c31e2030abe7a34f231a01b93e2b3a617b"
+    },
+    "otel-instrumentation": {
+      "source": "kopai-app/kopai-mono",
+      "sourceType": "github",
+      "skillPath": "skills/otel-instrumentation/SKILL.md",
+      "computedHash": "4fbdb5f9b3bb3c0fef0555b04e0b665d1c0a36ebe12c1d470f172de4be2569aa"
+    },
+    "root-cause-analysis": {
+      "source": "kopai-app/kopai-mono",
+      "sourceType": "github",
+      "skillPath": "skills/root-cause-analysis/SKILL.md",
+      "computedHash": "9b62f6aa381213d8a6a834b007b3448705346f891cd8c7fb33796e524dbf8373"
+    }
+  }
+}
