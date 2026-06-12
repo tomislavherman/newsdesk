@@ -88,7 +88,7 @@ export async function analyzeSource(url: string, html: string, userId: number | 
 - name (string): short human-readable name for this source
 
 Important rules for selector detection:
-- The article link inside each container must point to the EXTERNAL article URL, not to internal site navigation (e.g. not "vote?id=...", "item?id=...", "/comments/...", or same-domain links). Look for <a href="https://..."> pointing to a different domain.
+- The article link inside each container must point to an article page, not to navigation junk (e.g. not "vote?id=...", "item?id=...", "/comments/...", author profiles, tag/category index pages). Same-domain article links like "/category/article-slug" are fine — publisher sites link to their own articles.
 - The title text must be the article headline only — exclude rank numbers (e.g. "1.", "28."), bullet points, or other list prefixes that appear in sibling elements outside the link itself.
 
 URL: ${url}
