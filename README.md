@@ -30,6 +30,33 @@ sudo systemctl enable --now newsdesk
 
 Configure Tailscale Serve to proxy port 3000.
 
+## Deployment (public domain)
+
+To expose the app directly on a public IP/domain instead of via Tailscale:
+
+**1. Bind to all interfaces** — in `.env`:
+```
+HOST=0.0.0.0
+```
+
+**2. Allow port 3000 through the OS firewall** (Ubuntu with iptables):
+```bash
+sudo iptables -I INPUT 6 -p tcp --dport 3000 -j ACCEPT
+```
+
+Persist the rule across reboots:
+```bash
+sudo apt install iptables-persistent -y
+sudo netfilter-persistent save
+```
+
+**3. Open port 3000 in OCI console** — add an ingress rule for TCP port 3000 in your VCN Security List or Network Security Group.
+
+**4. Restart the service**:
+```bash
+sudo systemctl restart newsdesk
+```
+
 ## Environment variables
 
 | Variable | Default | Description |
