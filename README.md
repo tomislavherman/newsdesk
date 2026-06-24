@@ -57,6 +57,35 @@ sudo netfilter-persistent save
 sudo systemctl restart newsdesk
 ```
 
+## HAProxy (port 80 reverse proxy)
+
+Use HAProxy to serve the app on port 80 while it runs internally on port 3000.
+
+**1. Install HAProxy**:
+```bash
+sudo apt install haproxy -y
+```
+
+**2. Copy the config**:
+```bash
+sudo cp haproxy.cfg /etc/haproxy/haproxy.cfg
+```
+
+**3. Open port 80 in the OS firewall**:
+```bash
+sudo iptables -I INPUT 6 -p tcp --dport 80 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+**4. Open port 80 in OCI console** — add an ingress rule for TCP port 80 in your VCN Security List or Network Security Group.
+
+**5. Enable and start HAProxy**:
+```bash
+sudo systemctl enable --now haproxy
+```
+
+The app stays bound to `127.0.0.1:3000` — HAProxy handles all public traffic on port 80.
+
 ## Environment variables
 
 | Variable | Default | Description |
