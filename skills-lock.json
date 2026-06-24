@@ -7,6 +7,12 @@
       "skillPath": "skills/create-dashboard/SKILL.md",
       "computedHash": "bb21eadfb0fe541d257f609296dcd2c31e2030abe7a34f231a01b93e2b3a617b"
     },
+    "dimgrid": {
+      "source": "tomislavherman/dimgrid",
+      "sourceType": "github",
+      "skillPath": "skills/dimgrid/SKILL.md",
+      "computedHash": "94598282c11ae934c09b4febc0a1d2428ab2557ad3e9a86cd38b2371f7fd5443"
+    },
     "otel-instrumentation": {
       "source": "kopai-app/kopai-mono",
       "sourceType": "github",
